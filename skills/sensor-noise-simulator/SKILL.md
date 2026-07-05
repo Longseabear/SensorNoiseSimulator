@@ -17,7 +17,7 @@ python C:/Users/leap1/.codex/skills/sensor-noise-simulator/scripts/run_noise_sim
 ```
 
 3. Use `--acquisition single` for one RAW or `--acquisition idcg` for two RAWs.
-4. For hosted-viewer HDR samples, let the wrapper auto-apply manifest `photonWhitePoint`; this preserves parity with the web viewer.
+4. Treat HDR values as photon values by default; `photonWhitePoint` defaults to `1.0`.
 5. Verify output with `Get-FileHash` or binary reads when parity matters.
 
 ## Common Commands
@@ -53,6 +53,6 @@ The IDCG command writes:
 
 ## Important Web Parity Detail
 
-Hosted-viewer sample manifest entries may define `photonWhitePoint`. If omitted in Python, HDR inputs may be auto-normalized differently and fail binary parity. Use the wrapper, or pass `--photon-white-point` explicitly.
+The web viewer and Python package both default HDR white point to `1.0`. Use `--auto-white-point p75` only when intentionally importing a non-normalized HDR for convenience, because that changes the photon mapping and breaks binary parity with the default sensor simulation contract.
 
 For more CLI options and defaults, read `references/python-cli.md`.

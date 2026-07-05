@@ -23,7 +23,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--input-kind", choices=["hdr", "raw"], help="Override input kind. Defaults from extension.")
     parser.add_argument("--pixel-type", default="Bayer", choices=["Bayer", "Tetra", "TetraSquare"])
     parser.add_argument("--pixel-order", default=0, type=int)
-    parser.add_argument("--photon-white-point", type=float)
+    parser.add_argument("--photon-white-point", type=float, default=1.0, help="HDR photon white point. Defaults to 1.0 to match the web viewer contract.")
+    parser.add_argument("--auto-white-point", choices=["p75"], help="Optional HDR import convenience normalization. Omit for web parity.")
     parser.add_argument("--width", type=int, help="Required for raw input.")
     parser.add_argument("--height", type=int, help="Required for raw input.")
     parser.add_argument("--black-level", type=int, default=64)
@@ -64,6 +65,7 @@ def load_input(args: argparse.Namespace):
             pixel_type=args.pixel_type,
             pixel_order=args.pixel_order,
             photon_white_point=args.photon_white_point,
+            auto_white_point=args.auto_white_point,
         )
     if args.width is None or args.height is None:
         raise ValueError("--width and --height are required for raw input.")

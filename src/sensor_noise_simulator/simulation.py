@@ -30,18 +30,21 @@ def sensor_noise_terms(
     signal_electron: np.ndarray,
     sensor: SensorProfile,
     readout: ReadoutConfig,
+    eit: float = 1.0,
 ) -> Mapping[str, np.ndarray]:
     cg = max(float(readout.sensor_cg), 1e-9)
     prnu = signal_electron * sensor.sensor_prnu * gaussian_like(x, y, sensor.seed("PRNU", 1001))
     shot = np.sqrt(np.maximum(signal_electron, 0.0)) * gaussian_like(x, y, sensor.seed("ShotNoise", 2001))
     read = readout.sensor_rn * gaussian_like(x, y, readout.read_noise_seed)
     pfpn = (sensor.sensor_pfpn / cg) * gaussian_like(x, y, sensor.seed("PFPN", 1002))
-    total = prnu + shot + read + pfpn
+    dark = sensor.sensor_dark * max(float(eit), 0.0) * gaussian_like(x, y, sensor.seed("Dark", 1003))
+    total = prnu + shot + read + pfpn + dark
     return {
         "prnu_electron": prnu,
         "shot_electron": shot,
         "read_electron": read,
         "pfpn_electron": pfpn,
+        "dark_electron": dark,
         "total_electron": total,
     }
 
@@ -68,7 +71,7 @@ def simulate_adc(
     adc_full_scale = cfg.adc_full_scale(sensor)
 
     signal_electron = np.maximum(0.0, mosaic * sensor.sensor_fwc * cfg.eit)
-    noise = sensor_noise_terms(xx, yy, signal_electron, sensor, readout)
+    noise = sensor_noise_terms(xx, yy, signal_electron, sensor, readout, cfg.eit)
     electron = signal_electron + noise["total_electron"]
     voltage = electron * readout.sensor_cg * readout.analog_gain
     normalized_signal = voltage / max(adc_full_scale, 1e-9) - cfg.black

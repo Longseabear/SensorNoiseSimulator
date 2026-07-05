@@ -386,6 +386,19 @@ function sensorSeed(key, fallback = 0) {
   return Number(appState.sensor?.Seeds?.[key] ?? fallback);
 }
 
+function activeCgMode() {
+  const modes = appState.sensor.CGModes || [];
+  return modes[Math.min(Math.max(0, activeCgModeIndex), Math.max(0, modes.length - 1))] || null;
+}
+
+function sensorDisplayValue(key, fallback = 0) {
+  const mode = activeCgMode();
+  if ((key === "SensorCG" || key === "SensorRN") && mode && mode[key] != null) {
+    return Number(mode[key]);
+  }
+  return sensorValue(key, fallback);
+}
+
 function isIdcgMode() {
   return appState.simulation.acquisitionMode === "idcg";
 }
@@ -497,8 +510,8 @@ function buildGpuParams({ readouts = activeReadoutConfigs(), outputWidth = rende
     secondary.sensorCG,
     primary.readNoiseSeed,
     secondary.readNoiseSeed,
-    0,
-    0,
+    sensorValue("SensorDark", 0),
+    sensorSeed("Dark", 1003),
   ]);
 }
 
@@ -516,23 +529,26 @@ function gaussianLike(x, y, noiseSeed) {
   return (sum - 3) / Math.sqrt(0.5);
 }
 
-function sensorNoiseTerms(x, y, signalElectron, readout = readoutConfig()) {
+function sensorNoiseTerms(x, y, signalElectron, readout = readoutConfig(), eit = eitScale()) {
   const prnu = sensorValue("SensorPRNU", 0);
   const rn = readout.sensorRN;
   const cg = Math.max(readout.sensorCG, 1e-9);
   const pfpn = sensorValue("SensorPFPN", 0);
+  const dark = sensorValue("SensorDark", 0);
 
   const prnuElectron = signalElectron * prnu * gaussianLike(x, y, sensorSeed("PRNU", 1001));
   const shotElectron = Math.sqrt(Math.max(signalElectron, 0)) * gaussianLike(x, y, sensorSeed("ShotNoise", 2001));
   const readElectron = rn * gaussianLike(x, y, readout.readNoiseSeed);
   const pfpnElectron = (pfpn / cg) * gaussianLike(x, y, sensorSeed("PFPN", 1002));
+  const darkElectron = dark * Math.max(0, eit) * gaussianLike(x, y, sensorSeed("Dark", 1003));
 
   return {
     prnuElectron,
     shotElectron,
     readElectron,
     pfpnElectron,
-    totalElectron: prnuElectron + shotElectron + readElectron + pfpnElectron,
+    darkElectron,
+    totalElectron: prnuElectron + shotElectron + readElectron + pfpnElectron + darkElectron,
   };
 }
 
@@ -578,7 +594,7 @@ function updateSensorEditor() {
   appState.sensor.ADCFullScale = adcFullScaleUv();
   appState.sensor.Pedestal = pedestalForAdcBits(activeReadoutConfigs()[0]?.adcBits);
   for (const [key, input] of Object.entries(sensorInputs)) {
-    input.value = String(appState.sensor?.[key] ?? 0);
+    input.value = String(sensorDisplayValue(key, 0));
     syncSensorSliderFromInput(key);
   }
   updateSensorEffective();
@@ -590,12 +606,23 @@ function readSensorEditor() {
     if (key === "Pedestal") continue;
     appState.sensor[key] = Number(input.value);
   }
+  const modes = Array.isArray(appState.sensor.CGModes) ? appState.sensor.CGModes.slice() : [];
+  const mode = modes[activeCgModeIndex];
+  if (mode) {
+    modes[activeCgModeIndex] = {
+      ...mode,
+      SensorCG: Number(sensorInputs.SensorCG.value),
+      SensorRN: Number(sensorInputs.SensorRN.value),
+    };
+    appState.sensor.CGModes = modes;
+  }
   appState.sensor.Pedestal = pedestalForAdcBits(activeReadoutConfigs()[0]?.adcBits);
   appState.sensor.ADCFullScale = adcFullScaleUv();
   sensorInputs.ADCFullScale.value = formatSensorValue("ADCFullScale", appState.sensor.ADCFullScale);
   syncSensorSliderFromInput("ADCFullScale");
   activeSensor = appState.sensor;
   updateSensorEffective();
+  updateActiveCgModeLabel();
 }
 
 function updatePedestalDisplay(bits = activeReadoutConfigs()[0]?.adcBits) {
@@ -609,7 +636,7 @@ function updateSensorEffective() {
   const primary = activeReadoutConfigs()[0] || readoutConfig();
   const adcMax = adcLevels(primary.adcBits);
   const fwc = sensorValue("SensorFWC", 0);
-  const cg = sensorValue("SensorCG", 1);
+  const cg = primary.sensorCG;
   const pedestal = pedestalForAdcBits(primary.adcBits);
   const adcFullScale = adcFullScaleUv();
   const fwcVoltage = fwc * cg;
@@ -617,6 +644,16 @@ function updateSensorEffective() {
   const mode = appState.sensor.ActiveCGMode ? `${appState.sensor.ActiveCGMode}: ` : "";
   updatePedestalDisplay(primary.adcBits);
   sensorEffectiveEl.textContent = `${mode}photon 1.0 maps to ${fwc.toFixed(1)} e- / ${fwcVoltage.toFixed(1)} uV. ADC full-scale ${adcFullScale.toFixed(1)} uV, pedestal ${pedestal.toFixed(0)} LSB (${primary.adcBits}b), FWC maps to ${fwcCode.toFixed(1)} LSB.`;
+}
+
+function cgModeOptionText(mode) {
+  return `${mode.Name} - CG ${formatSensorValue("SensorCG", mode.SensorCG)} uV/e-, RN ${formatSensorValue("SensorRN", mode.SensorRN)} e-`;
+}
+
+function updateActiveCgModeLabel() {
+  const mode = activeCgMode();
+  const option = sensorCgModeSelect.options[activeCgModeIndex];
+  if (mode && option) option.textContent = cgModeOptionText(mode);
 }
 
 function updateCanvasZoom() {
@@ -667,7 +704,7 @@ function sensorChannelCpu(x, y) {
 
 function computeAdcCodeAt(x, y, index, params) {
   const signalElectron = Math.max(0, activeMosaic[index] * params.sensorFWC * params.eit);
-  const noiseTerms = sensorNoiseTerms(x, y, signalElectron, params.readout);
+  const noiseTerms = sensorNoiseTerms(x, y, signalElectron, params.readout, params.eit);
   const electron = signalElectron + noiseTerms.totalElectron;
   const voltage = electron * params.readout.sensorCG * params.analogGain;
   const normalizedSignal = voltage / Math.max(params.adcFullScale, 1e-9) - params.black;
@@ -717,6 +754,30 @@ function downloadBlob(blob, filename) {
   anchor.click();
   anchor.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function saveBlobLocally(blob, filename, typeDescription = "File") {
+  if (window.showSaveFilePicker) {
+    const extension = filename.includes(".") ? `.${filename.split(".").pop()}` : "";
+    const handle = await window.showSaveFilePicker({
+      suggestedName: filename,
+      types: [
+        {
+          description: typeDescription,
+          accept: {
+            [blob.type || "application/octet-stream"]: extension ? [extension] : [],
+          },
+        },
+      ],
+    });
+    const writable = await handle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+    return { filename: handle.name || filename, picker: true };
+  }
+
+  downloadBlob(blob, filename);
+  return { filename, picker: false };
 }
 
 function adcRawBufferForReadout(readout) {
@@ -855,22 +916,26 @@ function saveSensorPrs() {
   statusEl.textContent = `Saved Sensor PRS locally: ${filename}`;
 }
 
-function saveAdcRawForReadout(readout) {
+async function saveAdcRawForReadout(readout) {
   const adcBits = Number(readout.adcBits ?? appState.simulation.adcBits);
   const { buffer, params } = adcRawBufferForReadout(readout);
 
   const modeSuffix = isIdcgMode() && readout?.name ? `_${safeFileStem(readout.name)}` : "";
   const filename = `${safeFileStem(activeInputLabel)}${modeSuffix}_${adcBits}b.raw`;
-  downloadBlob(new Blob([buffer], { type: "application/octet-stream" }), filename);
-  return { filename, params };
+  const saved = await saveBlobLocally(new Blob([buffer], { type: "application/octet-stream" }), filename, "16-bit RAW image");
+  return { filename: saved.filename, params, picker: saved.picker };
 }
 
-function saveAdcRawResult() {
+async function saveAdcRawResult() {
   const readouts = activeReadoutConfigs();
-  const saved = readouts.map((readout) => saveAdcRawForReadout(readout));
+  const saved = [];
+  for (const readout of readouts) {
+    saved.push(await saveAdcRawForReadout(readout));
+  }
   const files = saved.map((item) => item.filename).join(", ");
   const ranges = saved.map((item) => `${item.filename}: 0-${item.params.levels}`).join(" / ");
-  statusEl.textContent = `Saved ADC RAW locally: ${files}. ${inputMeta.width}x${inputMeta.height}, uint16 little-endian, valid ranges ${ranges}.`;
+  const method = saved.every((item) => item.picker) ? "via save dialog" : "via browser download";
+  statusEl.textContent = `Saved ADC RAW ${method}: ${files}. ${inputMeta.width}x${inputMeta.height}, uint16 little-endian, valid ranges ${ranges}.`;
 }
 
 function demosaicChannel(adcMap, x, y, targetChannel, width = inputMeta.width) {
@@ -961,7 +1026,8 @@ function drawCpuPreview(targetContext = previewContext, readout = readoutConfig(
               Math.max(signalElectron, 0) +
               params.readout.sensorRN ** 2 +
               (sensorValue("SensorPRNU", 0) * signalElectron) ** 2 +
-              (sensorValue("SensorPFPN", 0) / Math.max(params.readout.sensorCG, 1e-9)) ** 2,
+              (sensorValue("SensorPFPN", 0) / Math.max(params.readout.sensorCG, 1e-9)) ** 2 +
+              (sensorValue("SensorDark", 0) * Math.max(0, params.eit)) ** 2,
           ),
         );
         const noiseDisplay = Math.min(1, Math.max(0, 0.5 + noiseTerms.totalElectron / (6 * sigma)));
@@ -1129,6 +1195,7 @@ function drawSnrGraph() {
 
   const fwc = Math.max(1, sensorValue("SensorFWC", 10000));
   const prnu = Math.max(0, sensorValue("SensorPRNU", 0));
+  const dark = Math.max(0, sensorValue("SensorDark", 0));
   const adcFullScale = Math.max(1e-9, adcFullScaleUv());
   const eit = Math.max(1e-9, eitScale());
   const black = Math.max(0, appState.simulation.black || 0);
@@ -1151,7 +1218,8 @@ function drawSnrGraph() {
     const adcClipElectron = normalizedClip * adcFullScale / Math.max(cg * analogGain, 1e-9);
     const effectiveCollectedFwc = Math.max(1e-9, Math.min(fwc, adcClipElectron));
     const effectiveInputFwc = Math.max(1e-9, effectiveCollectedFwc / eit);
-    return { readout, cg, rn, quantNoiseElectron, effectiveCollectedFwc, effectiveInputFwc };
+    const darkNoiseElectron = dark * eit;
+    return { readout, cg, rn, quantNoiseElectron, darkNoiseElectron, effectiveCollectedFwc, effectiveInputFwc };
   });
 
   const maxEffectiveInputFwc = Math.max(...models.map((model) => model.effectiveInputFwc), 1);
@@ -1170,7 +1238,8 @@ function drawSnrGraph() {
     const rnVariance = model.rn * model.rn;
     const prnuVariance = (prnu * collectedElectron) ** 2;
     const quantVariance = model.quantNoiseElectron * model.quantNoiseElectron;
-    const noise = Math.sqrt(shotVariance + rnVariance + prnuVariance + quantVariance);
+    const darkVariance = model.darkNoiseElectron * model.darkNoiseElectron;
+    const noise = Math.sqrt(shotVariance + rnVariance + prnuVariance + quantVariance + darkVariance);
     const snr = collectedElectron / Math.max(noise, 1e-12);
     return 20 * Math.log10(Math.max(snr, 1e-12));
   }
@@ -1509,7 +1578,7 @@ function renderCgModeSelect(profile, selectedIndex = 0) {
     ...modes.map((mode, index) => {
       const option = document.createElement("option");
       option.value = String(index);
-      option.textContent = `${mode.Name} - CG ${formatSensorValue("SensorCG", mode.SensorCG)} uV/e-, RN ${formatSensorValue("SensorRN", mode.SensorRN)} e-`;
+      option.textContent = cgModeOptionText(mode);
       return option;
     }),
   );
@@ -2009,17 +2078,19 @@ async function main() {
       statusEl.textContent = `Failed to save Sensor PRS: ${error.message}`;
     }
   });
-  saveSimulationResultButton.addEventListener("click", () => {
+  saveSimulationResultButton.addEventListener("click", async () => {
     const readoutBitsText = activeReadoutConfigs().map((readout) => `${readout.name} ${readout.adcBits}-bit`).join(" / ");
     statusEl.textContent = `Saving ADC RAW locally: ${inputMeta.width}x${inputMeta.height}, ${readoutBitsText} into uint16 raw...`;
-    setTimeout(() => {
-      try {
-        saveAdcRawResult();
-      } catch (error) {
-        console.error(error);
-        statusEl.textContent = `Failed to save ADC RAW: ${error.message}`;
+    try {
+      await saveAdcRawResult();
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        statusEl.textContent = "ADC RAW save cancelled.";
+        return;
       }
-    }, 0);
+      console.error(error);
+      statusEl.textContent = `Failed to save ADC RAW: ${error.message}`;
+    }
   });
   document.querySelector("#seed").addEventListener("click", () => {
     seed = Math.random() * 1000;

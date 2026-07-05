@@ -47,8 +47,6 @@ function parseHdrToRgbFloat(buffer, metadata = {}) {
   const rData = new Float32Array(width * height);
   const gData = new Float32Array(width * height);
   const bData = new Float32Array(width * height);
-  const luminanceSamples = [];
-  const sampleStep = Math.max(1, Math.floor((width * height) / 65536));
   for (let index = 0; index < width * height; index += 1) {
     const offset = index * 4;
     const exponent = payload[offset + 3];
@@ -62,16 +60,9 @@ function parseHdrToRgbFloat(buffer, metadata = {}) {
     rData[index] = payload[offset] * scale;
     gData[index] = payload[offset + 1] * scale;
     bData[index] = payload[offset + 2] * scale;
-    if (index % sampleStep === 0) {
-      luminanceSamples.push(0.2126 * rData[index] + 0.7152 * gData[index] + 0.0722 * bData[index]);
-    }
   }
 
-  luminanceSamples.sort((a, b) => a - b);
-  const exposureReference = Math.max(
-    1e-6,
-    Number(metadata.photonWhitePoint ?? luminanceSamples[Math.floor(luminanceSamples.length * 0.75)] ?? 1),
-  );
+  const exposureReference = Math.max(1e-6, Number(metadata.photonWhitePoint ?? 1));
 
   return { width, height, r: rData, g: gData, b: bData, exposureReference };
 }
@@ -80,26 +71,7 @@ function parseHdrDirectToSensorMosaic(buffer, metadata = {}, sensorSampling) {
   const { bytes, width, height, payloadStart } = readHdrHeader(buffer);
   const payload = decodeRadiancePayload(bytes.subarray(payloadStart), width, height);
   const pixelCount = width * height;
-  const sampleStep = Math.max(1, Math.floor(pixelCount / 65536));
-  const luminanceSamples = [];
-  for (let index = 0; index < pixelCount; index += sampleStep) {
-    const offset = index * 4;
-    const exponent = payload[offset + 3];
-    if (exponent === 0) {
-      luminanceSamples.push(0);
-      continue;
-    }
-    const scale = 2 ** (exponent - 128) / 256;
-    const r = payload[offset] * scale;
-    const g = payload[offset + 1] * scale;
-    const b = payload[offset + 2] * scale;
-    luminanceSamples.push(0.2126 * r + 0.7152 * g + 0.0722 * b);
-  }
-  luminanceSamples.sort((a, b) => a - b);
-  const exposureReference = Math.max(
-    1e-6,
-    Number(metadata.photonWhitePoint ?? luminanceSamples[Math.floor(luminanceSamples.length * 0.75)] ?? 1),
-  );
+  const exposureReference = Math.max(1e-6, Number(metadata.photonWhitePoint ?? 1));
 
   const data = new Float32Array(pixelCount);
   for (let y = 0; y < height; y += 1) {

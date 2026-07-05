@@ -53,6 +53,15 @@ Each RAW output is `uint16 little-endian`. Valid ADC code range is still
 
 Use `--preview-pgm` to also write a dependency-free 16-bit PGM preview.
 
+HDR inputs are treated as scene-linear photon data by default:
+
+```text
+HDR value 1.0 -> photon 1.0 -> SensorFWC
+```
+
+The CLI default is `--photon-white-point 1`. Use `--auto-white-point p75`
+only as an explicit import convenience for non-normalized display-oriented HDRs.
+
 ## Library
 
 ```python
@@ -90,7 +99,7 @@ The Python path mirrors the viewer math:
 ```text
 photon 0..1
   -> electron = photon * SensorFWC * EIT
-  -> PRNU + shared shot noise + readout-specific read noise + PFPN
+  -> PRNU + shared shot noise + readout-specific read noise + PFPN + Dark pattern
   -> voltage = electron * SensorCG * AnalogGain
   -> ADC code with bit-depth-derived pedestal
   -> optional pedestal-relative digital gain with dither
@@ -98,8 +107,10 @@ photon 0..1
 
 Important parity rules:
 
+- HDR default white point is `1.0`, matching the web viewer photon contract.
 - `pedestal = 2^(ADCBits - 4)`.
 - `ShotNoise` seed is shared between IDCG branches.
 - read noise uses each CG mode's `Seeds.ReadNoise`.
 - PRNU and PFPN are fixed-pattern sources shared by pixel position.
+- Dark pattern uses `Seeds.Dark`, is shared by readouts, and scales with EIT.
 - ADC output is clipped to `0..2^ADCBits-1`.

@@ -91,19 +91,30 @@ def _decode_radiance_payload(payload: bytes, width: int, height: int) -> np.ndar
     return output.reshape(height, width, 4)
 
 
-def read_hdr_rgb(path: str | Path, photon_white_point: float | None = None) -> tuple[np.ndarray, float]:
+def auto_hdr_white_point(rgb: np.ndarray, percentile: float = 0.75) -> float:
+    luminance = 0.2126 * rgb[:, :, 0] + 0.7152 * rgb[:, :, 1] + 0.0722 * rgb[:, :, 2]
+    sample_step = max(1, luminance.size // 65536)
+    samples = np.sort(luminance.reshape(-1)[::sample_step])
+    index = min(len(samples) - 1, max(0, int(len(samples) * percentile)))
+    return float(samples[index])
+
+
+def read_hdr_rgb(
+    path: str | Path,
+    photon_white_point: float | None = 1.0,
+    *,
+    auto_white_point: str | None = None,
+) -> tuple[np.ndarray, float]:
     data = Path(path).read_bytes()
     width, height, payload_start = _read_hdr_header(data)
     payload = _decode_radiance_payload(data[payload_start:], width, height).astype(np.float32)
     exponent = payload[:, :, 3]
     scale = np.where(exponent == 0, 0.0, np.exp2(exponent - 128.0) / 256.0)
     rgb = payload[:, :, :3] * scale[:, :, None]
-    if photon_white_point is None:
-        luminance = 0.2126 * rgb[:, :, 0] + 0.7152 * rgb[:, :, 1] + 0.0722 * rgb[:, :, 2]
-        sample_step = max(1, luminance.size // 65536)
-        reference = float(np.sort(luminance.reshape(-1)[::sample_step])[int(len(luminance.reshape(-1)[::sample_step]) * 0.75)])
+    if auto_white_point == "p75":
+        reference = auto_hdr_white_point(rgb, 0.75)
     else:
-        reference = float(photon_white_point)
+        reference = float(1.0 if photon_white_point is None else photon_white_point)
     return rgb, max(1e-6, reference)
 
 
@@ -112,9 +123,10 @@ def load_hdr_mosaic(
     *,
     pixel_type: str = "Bayer",
     pixel_order: int = 0,
-    photon_white_point: float | None = None,
+    photon_white_point: float | None = 1.0,
+    auto_white_point: str | None = None,
 ) -> np.ndarray:
-    rgb, reference = read_hdr_rgb(path, photon_white_point)
+    rgb, reference = read_hdr_rgb(path, photon_white_point, auto_white_point=auto_white_point)
     height, width, _ = rgb.shape
     yy, xx = np.indices((height, width))
     channels = channel_for_pixel(xx, yy, pixel_type, pixel_order)

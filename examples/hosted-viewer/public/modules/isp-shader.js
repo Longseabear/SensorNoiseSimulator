@@ -27,8 +27,8 @@ struct Params {
   sensorCG2: f32,
   readNoiseSeed: f32,
   readNoiseSeed2: f32,
-  _pad0: f32,
-  _pad1: f32,
+  sensorDark: f32,
+  darkSeed: f32,
 };
 
 @group(0) @binding(0) var rawTex: texture_2d<f32>;
@@ -165,7 +165,8 @@ fn adcCodeFloat(coord: vec2u) -> f32 {
   let shot = sqrt(max(signalElectron, 0.0)) * centeredHash(vec2f(src) + vec2f(31.0, 47.0));
   let rn = readoutRN(coord) * centeredHashWithSeed(vec2f(src) + vec2f(53.0, 71.0), readoutSeed(coord));
   let pfpn = (params.sensorPFPN / cg) * centeredHash(vec2f(src) + vec2f(79.0, 97.0));
-  let electron = signalElectron + prnu + shot + rn + pfpn;
+  let dark = params.sensorDark * max(params.eit, 0.0) * centeredHashWithSeed(vec2f(src) + vec2f(127.0, 139.0), params.darkSeed);
+  let electron = signalElectron + prnu + shot + rn + pfpn + dark;
   let voltage = electron * cg * params.analogGain;
   let normalizedSignal = voltage / max(params.adcFullScale, 1e-6) - params.black;
   return params.pedestal + normalizedSignal * max(0.0, params.adcLevels - params.pedestal);
@@ -244,8 +245,9 @@ fn fs(in: VertexOut) -> @location(0) vec4f {
     let noise = signalElectron * params.sensorPRNU * centeredHash(vec2f(src) + vec2f(11.0, 23.0))
       + sqrt(max(signalElectron, 0.0)) * centeredHash(vec2f(src) + vec2f(31.0, 47.0))
       + readoutRN(coord) * centeredHashWithSeed(vec2f(src) + vec2f(53.0, 71.0), readoutSeed(coord))
-      + (params.sensorPFPN / cg) * centeredHash(vec2f(src) + vec2f(79.0, 97.0));
-    let sigma = max(1e-6, sqrt(max(signalElectron, 0.0) + readoutRN(coord) * readoutRN(coord) + pow(params.sensorPRNU * signalElectron, 2.0) + pow(params.sensorPFPN / cg, 2.0)));
+      + (params.sensorPFPN / cg) * centeredHash(vec2f(src) + vec2f(79.0, 97.0))
+      + params.sensorDark * max(params.eit, 0.0) * centeredHashWithSeed(vec2f(src) + vec2f(127.0, 139.0), params.darkSeed);
+    let sigma = max(1e-6, sqrt(max(signalElectron, 0.0) + readoutRN(coord) * readoutRN(coord) + pow(params.sensorPRNU * signalElectron, 2.0) + pow(params.sensorPFPN / cg, 2.0) + pow(params.sensorDark * max(params.eit, 0.0), 2.0)));
     let value = clamp(0.5 + noise / (6.0 * sigma), 0.0, 1.0);
     return vec4f(vec3f(value), 1.0);
   }
