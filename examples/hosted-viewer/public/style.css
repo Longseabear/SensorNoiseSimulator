@@ -380,6 +380,10 @@ output {
   display: grid;
 }
 
+.capture-controls.is-idcg .single-control {
+  display: none;
+}
+
 .primary-actions {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);

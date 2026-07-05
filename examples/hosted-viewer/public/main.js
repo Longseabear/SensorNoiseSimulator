@@ -100,18 +100,27 @@ const controls = {
   eit: document.querySelector("#eit"),
   analogGain: document.querySelector("#analogGain"),
   digitalGain: document.querySelector("#digitalGain"),
+  idcgShotAnalogGain: document.querySelector("#idcgShotAnalogGain"),
+  idcgLongAnalogGain: document.querySelector("#idcgLongAnalogGain"),
+  idcgLongDigitalGain: document.querySelector("#idcgLongDigitalGain"),
   black: document.querySelector("#black"),
 };
 const outputs = {
   eit: document.querySelector("#eitValue"),
   analogGain: document.querySelector("#analogGainValue"),
   digitalGain: document.querySelector("#digitalGainValue"),
+  idcgShotAnalogGain: document.querySelector("#idcgShotAnalogGainValue"),
+  idcgLongAnalogGain: document.querySelector("#idcgLongAnalogGainValue"),
+  idcgLongDigitalGain: document.querySelector("#idcgLongDigitalGainValue"),
   black: document.querySelector("#blackValue"),
 };
 const scaleTextInputs = {
   eit: document.querySelector("#eitText"),
   analogGain: document.querySelector("#analogGainText"),
   digitalGain: document.querySelector("#digitalGainText"),
+  idcgShotAnalogGain: document.querySelector("#idcgShotAnalogGainText"),
+  idcgLongAnalogGain: document.querySelector("#idcgLongAnalogGainText"),
+  idcgLongDigitalGain: document.querySelector("#idcgLongDigitalGainText"),
 };
 const ispInputs = {
   wbR: document.querySelector("#wbR"),
@@ -125,6 +134,9 @@ const parameterSchema = {
   "simulation.eit": { label: "EIT", unit: "x", type: "log-number", min: 1 / 64, max: 64, slider: controls.eit, input: scaleTextInputs.eit },
   "simulation.analogGain": { label: "Analog gain", unit: "x", type: "log-number", min: 1, max: 32, slider: controls.analogGain, input: scaleTextInputs.analogGain },
   "simulation.digitalGain": { label: "Digital gain", unit: "x", type: "log-number", min: 1, max: 32, slider: controls.digitalGain, input: scaleTextInputs.digitalGain },
+  "simulation.idcgShotAnalogGain": { label: "Shot analog gain", unit: "x", type: "log-number", min: 1, max: 32, slider: controls.idcgShotAnalogGain, input: scaleTextInputs.idcgShotAnalogGain },
+  "simulation.idcgLongAnalogGain": { label: "Long analog gain", unit: "x", type: "log-number", min: 1, max: 32, slider: controls.idcgLongAnalogGain, input: scaleTextInputs.idcgLongAnalogGain },
+  "simulation.idcgLongDigitalGain": { label: "Long digital gain", unit: "x", type: "log-number", min: 1, max: 32, slider: controls.idcgLongDigitalGain, input: scaleTextInputs.idcgLongDigitalGain },
   "simulation.black": { label: "Black level", type: "number", control: controls.black },
   "simulation.adcBits": { label: "ADC bit depth", unit: "bit", type: "number-select", control: adcBitsSelect },
   "simpleIsp.wbR": { label: "WB R", type: "number", control: ispInputs.wbR },
@@ -165,6 +177,9 @@ const appState = {
     eit: 1,
     analogGain: 1,
     digitalGain: 1,
+    idcgShotAnalogGain: 1,
+    idcgLongAnalogGain: 1,
+    idcgLongDigitalGain: 1,
     black: 0,
     adcBits: 10,
     seed: Math.random() * 1000,
@@ -293,9 +308,15 @@ function updateOutputs() {
   outputs.eit.value = `${eit.toFixed(2)}x`;
   outputs.analogGain.value = `${analog.toFixed(2)}x`;
   outputs.digitalGain.value = `${digital.toFixed(2)}x`;
+  outputs.idcgShotAnalogGain.value = `${appState.simulation.idcgShotAnalogGain.toFixed(2)}x`;
+  outputs.idcgLongAnalogGain.value = `${appState.simulation.idcgLongAnalogGain.toFixed(2)}x`;
+  outputs.idcgLongDigitalGain.value = `${appState.simulation.idcgLongDigitalGain.toFixed(2)}x`;
   syncControlFromState("simulation.eit");
   syncControlFromState("simulation.analogGain");
   syncControlFromState("simulation.digitalGain");
+  syncControlFromState("simulation.idcgShotAnalogGain");
+  syncControlFromState("simulation.idcgLongAnalogGain");
+  syncControlFromState("simulation.idcgLongDigitalGain");
   outputs.black.value = Number(appState.simulation.black).toFixed(3);
 }
 
@@ -351,20 +372,46 @@ function renderWidth() {
   return inputMeta.width * (isIdcgMode() ? 2 : 1);
 }
 
-function readoutConfig(modeIndex = activeCgModeIndex) {
+function readoutGainConfig(branch = "single") {
+  if (!isIdcgMode()) {
+    return {
+      analogGain: analogGainScale(),
+      digitalGain: digitalGainScale(),
+    };
+  }
+  if (branch === "long") {
+    return {
+      analogGain: appState.simulation.idcgLongAnalogGain,
+      digitalGain: appState.simulation.idcgLongDigitalGain,
+    };
+  }
+  return {
+    analogGain: appState.simulation.idcgShotAnalogGain,
+    digitalGain: 1,
+  };
+}
+
+function readoutConfig(modeIndex = activeCgModeIndex, branch = "single") {
   const modes = appState.sensor.CGModes || [];
   const mode = modes[Math.min(Math.max(0, modeIndex), Math.max(0, modes.length - 1))] || {};
+  const gains = readoutGainConfig(branch);
   return {
     name: mode.Name || appState.sensor.ActiveCGMode || "CG",
     sensorCG: Number(mode.SensorCG ?? appState.sensor.SensorCG ?? 1),
     sensorRN: Number(mode.SensorRN ?? appState.sensor.SensorRN ?? 0),
     readNoiseSeed: Number(mode.Seeds?.ReadNoise ?? appState.sensor.Seeds?.ReadNoise ?? 3001),
+    branch,
+    analogGain: gains.analogGain,
+    digitalGain: gains.digitalGain,
   };
 }
 
 function activeReadoutConfigs() {
   if (!isIdcgMode()) return [readoutConfig(activeCgModeIndex)];
-  return [readoutConfig(appState.simulation.idcgModeA), readoutConfig(appState.simulation.idcgModeB)];
+  return [
+    readoutConfig(appState.simulation.idcgModeA, "shot"),
+    readoutConfig(appState.simulation.idcgModeB, "long"),
+  ];
 }
 
 function renderIdcgModeSelects() {
@@ -401,8 +448,8 @@ function buildGpuParams({ readouts = activeReadoutConfigs(), outputWidth = rende
     outputWidth,
     inputMeta.height,
     appState.simulation.eit,
-    appState.simulation.analogGain,
-    appState.simulation.digitalGain,
+    primary.analogGain,
+    primary.digitalGain,
     appState.simulation.black,
     seed,
     pixelTypeId(),
@@ -603,8 +650,8 @@ function simulationParams(readout = readoutConfig()) {
   return {
     levels: adcLevels(),
     eit: eitScale(),
-    analogGain: analogGainScale(),
-    digitalGain: digitalGainScale(),
+    analogGain: readout.analogGain ?? analogGainScale(),
+    digitalGain: readout.digitalGain ?? digitalGainScale(),
     black: appState.simulation.black,
     sensorFWC: sensorValue("SensorFWC", 10000),
     readout,
@@ -667,6 +714,11 @@ function currentSensorPrs() {
       B: readoutConfig(appState.simulation.idcgModeB).name,
       AIndex: appState.simulation.idcgModeA,
       BIndex: appState.simulation.idcgModeB,
+    },
+    IDCGGains: {
+      ShotAnalogGain: appState.simulation.idcgShotAnalogGain,
+      LongAnalogGain: appState.simulation.idcgLongAnalogGain,
+      LongDigitalGain: appState.simulation.idcgLongDigitalGain,
     },
     Seeds: { ...(appState.sensor.Seeds || {}) },
     Notes: appState.sensor.Notes || [],
@@ -734,11 +786,11 @@ function drawCpuPreview(targetContext = previewContext, readout = readoutConfig(
   const params = {
     levels: adcLevels(),
     eit: eitScale(),
-    analogGain: analogGainScale(),
-    digitalGain: digitalGainScale(),
+    analogGain: readout.analogGain ?? analogGainScale(),
+    digitalGain: readout.digitalGain ?? digitalGainScale(),
     black: appState.simulation.black,
     sensorFWC: sensorValue("SensorFWC", 10000),
-    readout: readoutConfig(),
+    readout,
     pedestal: sensorValue("Pedestal", 0),
     adcFullScale: adcFullScaleUv(),
   };
@@ -964,8 +1016,6 @@ function drawSnrGraph() {
   const prnu = Math.max(0, sensorValue("SensorPRNU", 0));
   const pedestal = sensorValue("Pedestal", 0);
   const adcFullScale = Math.max(1e-9, adcFullScaleUv());
-  const analogGain = analogGainScale();
-  const digitalGain = digitalGainScale();
   const eit = Math.max(1e-9, eitScale());
   const black = Math.max(0, appState.simulation.black || 0);
   const levels = adcLevels();
@@ -976,6 +1026,8 @@ function drawSnrGraph() {
   const models = readouts.map((readout) => {
     const cg = Math.max(1e-9, readout.sensorCG);
     const rn = Math.max(0, readout.sensorRN);
+    const analogGain = Math.max(1e-9, readout.analogGain ?? analogGainScale());
+    const digitalGain = Math.max(1e-9, readout.digitalGain ?? digitalGainScale());
     const quantStepElectron = adcFullScale / Math.max(cg * analogGain * usableCodes, 1e-9);
     const digitalQuantStepElectron = quantStepElectron / Math.max(digitalGain, 1e-9);
     const quantNoiseElectron = Math.sqrt(quantStepElectron ** 2 + digitalQuantStepElectron ** 2) / Math.sqrt(12);
@@ -1300,6 +1352,11 @@ function applySensorProfile(index, cgModeIndex = 0) {
       : indexForName(profile.IDCGPair.B, appState.simulation.idcgModeB);
     appState.simulation.idcgModeA = Math.min(Math.max(0, aIndex), Math.max(0, modes.length - 1));
     appState.simulation.idcgModeB = Math.min(Math.max(0, bIndex), Math.max(0, modes.length - 1));
+  }
+  if (profile.IDCGGains) {
+    appState.simulation.idcgShotAnalogGain = Math.min(32, Math.max(1, Number(profile.IDCGGains.ShotAnalogGain ?? appState.simulation.idcgShotAnalogGain)));
+    appState.simulation.idcgLongAnalogGain = Math.min(32, Math.max(1, Number(profile.IDCGGains.LongAnalogGain ?? appState.simulation.idcgLongAnalogGain)));
+    appState.simulation.idcgLongDigitalGain = Math.min(32, Math.max(1, Number(profile.IDCGGains.LongDigitalGain ?? appState.simulation.idcgLongDigitalGain)));
   }
   activeSensor = appState.sensor;
   renderCgModeSelect(appState.sensor, activeCgModeIndex);
@@ -1660,7 +1717,14 @@ async function main() {
     draw();
   }
 
-  for (const path of ["simulation.eit", "simulation.analogGain", "simulation.digitalGain"]) {
+  for (const path of [
+    "simulation.eit",
+    "simulation.analogGain",
+    "simulation.digitalGain",
+    "simulation.idcgShotAnalogGain",
+    "simulation.idcgLongAnalogGain",
+    "simulation.idcgLongDigitalGain",
+  ]) {
     const schema = parameterSchema[path];
     schema.slider.addEventListener("input", () => {
       setLogStateFromSlider(path);

@@ -107,18 +107,39 @@
             <output id="eitValue">1.00x</output>
           </label>
 
-          <label>
+          <label class="single-control">
             Analog gain
             <input id="analogGain" type="range" min="0" max="5" step="0.01" value="0" />
             <input id="analogGainText" type="number" min="1" max="32" step="0.001" value="1" />
             <output id="analogGainValue">1.00x</output>
           </label>
 
-          <label>
+          <label class="single-control">
             Digital gain
             <input id="digitalGain" type="range" min="0" max="5" step="0.01" value="0" />
             <input id="digitalGainText" type="number" min="1" max="32" step="0.001" value="1" />
             <output id="digitalGainValue">1.00x</output>
+          </label>
+
+          <label class="idcg-control">
+            Shot analog gain
+            <input id="idcgShotAnalogGain" type="range" min="0" max="5" step="0.01" value="0" />
+            <input id="idcgShotAnalogGainText" type="number" min="1" max="32" step="0.001" value="1" />
+            <output id="idcgShotAnalogGainValue">1.00x</output>
+          </label>
+
+          <label class="idcg-control">
+            Long analog gain
+            <input id="idcgLongAnalogGain" type="range" min="0" max="5" step="0.01" value="0" />
+            <input id="idcgLongAnalogGainText" type="number" min="1" max="32" step="0.001" value="1" />
+            <output id="idcgLongAnalogGainValue">1.00x</output>
+          </label>
+
+          <label class="idcg-control">
+            Long digital gain
+            <input id="idcgLongDigitalGain" type="range" min="0" max="5" step="0.01" value="0" />
+            <input id="idcgLongDigitalGainText" type="number" min="1" max="32" step="0.001" value="1" />
+            <output id="idcgLongDigitalGainValue">1.00x</output>
           </label>
 
           <label>
