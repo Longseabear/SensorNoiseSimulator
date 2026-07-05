@@ -1,0 +1,7 @@
+interface:
+  display_name: "Sensor Noise Simulator"
+  short_description: "Run SensorPRS noise RAW generation"
+  default_prompt: "Use $sensor-noise-simulator to generate a noise-simulated ADC RAW from a SensorPRS file and an HDR or RAW input."
+
+policy:
+  allow_implicit_invocation: true

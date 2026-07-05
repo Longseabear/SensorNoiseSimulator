@@ -222,6 +222,8 @@ let activeCgModeIndex = 0;
 let view = { scale: 1, x: 0, y: 0 };
 let panStart = null;
 let zoomFrame = 0;
+let debugDigestToken = 0;
+const debugDigestsEnabled = new URLSearchParams(window.location.search).has("debugDigests");
 
 function syncStateFromControl(path) {
   syncStateFromControlValue(appState, parameterSchema, path);
@@ -717,6 +719,86 @@ function downloadBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+function adcRawBufferForReadout(readout) {
+  const params = simulationParams(readout);
+  const buffer = new ArrayBuffer(activeMosaic.length * Uint16Array.BYTES_PER_ELEMENT);
+  const output = new DataView(buffer);
+  for (let index = 0; index < activeMosaic.length; index += 1) {
+    const x = index % inputMeta.width;
+    const y = Math.floor(index / inputMeta.width);
+    output.setUint16(index * Uint16Array.BYTES_PER_ELEMENT, computeAdcCodeAt(x, y, index, params).adcCode, true);
+  }
+  return { buffer, params };
+}
+
+async function sha256Hex(buffer) {
+  const digest = await crypto.subtle.digest("SHA-256", buffer);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function adcRawDigestsForCurrentReadouts() {
+  const readouts = activeReadoutConfigs();
+  const results = [];
+  for (const readout of readouts) {
+    const { buffer, params } = adcRawBufferForReadout(readout);
+    const values = new Uint16Array(buffer);
+    let min = Number.POSITIVE_INFINITY;
+    let max = Number.NEGATIVE_INFINITY;
+    let sum = 0;
+    for (const value of values) {
+      min = Math.min(min, value);
+      max = Math.max(max, value);
+      sum += value;
+    }
+    results.push({
+      name: readout.name,
+      branch: readout.branch,
+      adcBits: readout.adcBits,
+      levels: params.levels,
+      pedestal: params.pedestal,
+      width: inputMeta.width,
+      height: inputMeta.height,
+      bytes: buffer.byteLength,
+      min,
+      max,
+      sum,
+      first16: Array.from(values.slice(0, 16)),
+      sha256: await sha256Hex(buffer),
+    });
+  }
+  return results;
+}
+
+function ensureDebugDigestElement() {
+  let element = document.querySelector("#debugAdcDigests");
+  if (!element) {
+    element = document.createElement("pre");
+    element.id = "debugAdcDigests";
+    element.hidden = true;
+    document.body.append(element);
+  }
+  return element;
+}
+
+function scheduleDebugDigests() {
+  if (!debugDigestsEnabled) return;
+  const token = ++debugDigestToken;
+  setTimeout(async () => {
+    try {
+      const digests = await adcRawDigestsForCurrentReadouts();
+      if (token !== debugDigestToken) return;
+      ensureDebugDigestElement().textContent = JSON.stringify({
+        input: activeInputLabel,
+        sensor: appState.sensor.SensorName,
+        acquisitionMode: appState.simulation.acquisitionMode,
+        digests,
+      });
+    } catch (error) {
+      ensureDebugDigestElement().textContent = JSON.stringify({ error: String(error.message || error) });
+    }
+  }, 0);
+}
+
 function currentSensorPrs() {
   readSensorEditor();
   return {
@@ -775,15 +857,7 @@ function saveSensorPrs() {
 
 function saveAdcRawForReadout(readout) {
   const adcBits = Number(readout.adcBits ?? appState.simulation.adcBits);
-  const params = simulationParams(readout);
-  const buffer = new ArrayBuffer(activeMosaic.length * Uint16Array.BYTES_PER_ELEMENT);
-  const output = new DataView(buffer);
-
-  for (let index = 0; index < activeMosaic.length; index += 1) {
-    const x = index % inputMeta.width;
-    const y = Math.floor(index / inputMeta.width);
-    output.setUint16(index * Uint16Array.BYTES_PER_ELEMENT, computeAdcCodeAt(x, y, index, params).adcCode, true);
-  }
+  const { buffer, params } = adcRawBufferForReadout(readout);
 
   const modeSuffix = isIdcgMode() && readout?.name ? `_${safeFileStem(readout.name)}` : "";
   const filename = `${safeFileStem(activeInputLabel)}${modeSuffix}_${adcBits}b.raw`;
@@ -1291,6 +1365,11 @@ function parseHdrDirectToSensorMosaic(buffer, metadata = {}) {
   });
 }
 
+globalThis.NoiseDebug = {
+  adcRawDigestsForCurrentReadouts,
+  activeReadoutConfigs,
+};
+
 async function loadSampleManifest() {
   const [hdrManifest, rawManifest] = await Promise.all([
     fetch("./assets/test-inputs/manifest.json").then((res) => res.json()),
@@ -1703,6 +1782,7 @@ async function main() {
     updateDiagnostics(renderBackend, webGpuDetail);
     const readoutBitsText = activeReadoutConfigs().map((readout) => `${readout.name} ${readout.adcBits}-bit`).join(" / ");
     statusEl.textContent = `${activeInputLabel}. ${appState.sensor.SensorName}. ADC ${readoutBitsText}. ${renderBackend}. ${webGpuDetail} Processing is client-side only.`;
+    scheduleDebugDigests();
   }
 
   async function loadServerSample(input) {
