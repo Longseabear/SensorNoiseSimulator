@@ -64,6 +64,8 @@ const acquisitionModeSelect = document.querySelector("#acquisitionMode");
 const idcgModeASelect = document.querySelector("#idcgModeA");
 const idcgModeBSelect = document.querySelector("#idcgModeB");
 const adcBitsSelect = document.querySelector("#adcBits");
+const idcgShotAdcBitsSelect = document.querySelector("#idcgShotAdcBits");
+const idcgLongAdcBitsSelect = document.querySelector("#idcgLongAdcBits");
 const viewModeSelect = document.querySelector("#viewMode");
 const sensorEffectiveEl = document.querySelector("#sensorEffective");
 const sensorInputs = {
@@ -101,6 +103,7 @@ const controls = {
   analogGain: document.querySelector("#analogGain"),
   digitalGain: document.querySelector("#digitalGain"),
   idcgShotAnalogGain: document.querySelector("#idcgShotAnalogGain"),
+  idcgShotDigitalGain: document.querySelector("#idcgShotDigitalGain"),
   idcgLongAnalogGain: document.querySelector("#idcgLongAnalogGain"),
   idcgLongDigitalGain: document.querySelector("#idcgLongDigitalGain"),
   black: document.querySelector("#black"),
@@ -110,6 +113,7 @@ const outputs = {
   analogGain: document.querySelector("#analogGainValue"),
   digitalGain: document.querySelector("#digitalGainValue"),
   idcgShotAnalogGain: document.querySelector("#idcgShotAnalogGainValue"),
+  idcgShotDigitalGain: document.querySelector("#idcgShotDigitalGainValue"),
   idcgLongAnalogGain: document.querySelector("#idcgLongAnalogGainValue"),
   idcgLongDigitalGain: document.querySelector("#idcgLongDigitalGainValue"),
   black: document.querySelector("#blackValue"),
@@ -119,6 +123,7 @@ const scaleTextInputs = {
   analogGain: document.querySelector("#analogGainText"),
   digitalGain: document.querySelector("#digitalGainText"),
   idcgShotAnalogGain: document.querySelector("#idcgShotAnalogGainText"),
+  idcgShotDigitalGain: document.querySelector("#idcgShotDigitalGainText"),
   idcgLongAnalogGain: document.querySelector("#idcgLongAnalogGainText"),
   idcgLongDigitalGain: document.querySelector("#idcgLongDigitalGainText"),
 };
@@ -135,10 +140,13 @@ const parameterSchema = {
   "simulation.analogGain": { label: "Analog gain", unit: "x", type: "log-number", min: 1, max: 32, slider: controls.analogGain, input: scaleTextInputs.analogGain },
   "simulation.digitalGain": { label: "Digital gain", unit: "x", type: "log-number", min: 1, max: 32, slider: controls.digitalGain, input: scaleTextInputs.digitalGain },
   "simulation.idcgShotAnalogGain": { label: "Shot analog gain", unit: "x", type: "log-number", min: 1, max: 32, slider: controls.idcgShotAnalogGain, input: scaleTextInputs.idcgShotAnalogGain },
+  "simulation.idcgShotDigitalGain": { label: "Shot digital gain", unit: "x", type: "log-number", min: 1, max: 32, slider: controls.idcgShotDigitalGain, input: scaleTextInputs.idcgShotDigitalGain },
   "simulation.idcgLongAnalogGain": { label: "Long analog gain", unit: "x", type: "log-number", min: 1, max: 32, slider: controls.idcgLongAnalogGain, input: scaleTextInputs.idcgLongAnalogGain },
   "simulation.idcgLongDigitalGain": { label: "Long digital gain", unit: "x", type: "log-number", min: 1, max: 32, slider: controls.idcgLongDigitalGain, input: scaleTextInputs.idcgLongDigitalGain },
   "simulation.black": { label: "Black level", type: "number", control: controls.black },
   "simulation.adcBits": { label: "ADC bit depth", unit: "bit", type: "number-select", control: adcBitsSelect },
+  "simulation.idcgShotAdcBits": { label: "Shot ADC bit depth", unit: "bit", type: "number-select", control: idcgShotAdcBitsSelect },
+  "simulation.idcgLongAdcBits": { label: "Long ADC bit depth", unit: "bit", type: "number-select", control: idcgLongAdcBitsSelect },
   "simpleIsp.wbR": { label: "WB R", type: "number", control: ispInputs.wbR },
   "simpleIsp.wbB": { label: "WB B", type: "number", control: ispInputs.wbB },
   "simpleIsp.gamma": { label: "Gamma", type: "number", control: ispInputs.gamma },
@@ -178,10 +186,13 @@ const appState = {
     analogGain: 1,
     digitalGain: 1,
     idcgShotAnalogGain: 1,
+    idcgShotDigitalGain: 1,
     idcgLongAnalogGain: 1,
     idcgLongDigitalGain: 1,
     black: 0,
     adcBits: 10,
+    idcgShotAdcBits: 10,
+    idcgLongAdcBits: 10,
     seed: Math.random() * 1000,
   },
   simpleIsp: {
@@ -309,14 +320,19 @@ function updateOutputs() {
   outputs.analogGain.value = `${analog.toFixed(2)}x`;
   outputs.digitalGain.value = `${digital.toFixed(2)}x`;
   outputs.idcgShotAnalogGain.value = `${appState.simulation.idcgShotAnalogGain.toFixed(2)}x`;
+  outputs.idcgShotDigitalGain.value = `${appState.simulation.idcgShotDigitalGain.toFixed(2)}x`;
   outputs.idcgLongAnalogGain.value = `${appState.simulation.idcgLongAnalogGain.toFixed(2)}x`;
   outputs.idcgLongDigitalGain.value = `${appState.simulation.idcgLongDigitalGain.toFixed(2)}x`;
   syncControlFromState("simulation.eit");
   syncControlFromState("simulation.analogGain");
   syncControlFromState("simulation.digitalGain");
   syncControlFromState("simulation.idcgShotAnalogGain");
+  syncControlFromState("simulation.idcgShotDigitalGain");
   syncControlFromState("simulation.idcgLongAnalogGain");
   syncControlFromState("simulation.idcgLongDigitalGain");
+  syncControlFromState("simulation.adcBits");
+  syncControlFromState("simulation.idcgShotAdcBits");
+  syncControlFromState("simulation.idcgLongAdcBits");
   outputs.black.value = Number(appState.simulation.black).toFixed(3);
 }
 
@@ -344,8 +360,8 @@ function pixelTypeId() {
   return 0;
 }
 
-function adcLevels() {
-  return 2 ** Number(appState.simulation.adcBits) - 1;
+function adcLevels(bits = appState.simulation.adcBits) {
+  return 2 ** Number(bits) - 1;
 }
 
 function viewModeId() {
@@ -377,17 +393,20 @@ function readoutGainConfig(branch = "single") {
     return {
       analogGain: analogGainScale(),
       digitalGain: digitalGainScale(),
+      adcBits: Number(appState.simulation.adcBits),
     };
   }
   if (branch === "long") {
     return {
       analogGain: appState.simulation.idcgLongAnalogGain,
       digitalGain: appState.simulation.idcgLongDigitalGain,
+      adcBits: Number(appState.simulation.idcgLongAdcBits),
     };
   }
   return {
     analogGain: appState.simulation.idcgShotAnalogGain,
-    digitalGain: 1,
+    digitalGain: appState.simulation.idcgShotDigitalGain,
+    adcBits: Number(appState.simulation.idcgShotAdcBits),
   };
 }
 
@@ -403,6 +422,7 @@ function readoutConfig(modeIndex = activeCgModeIndex, branch = "single") {
     branch,
     analogGain: gains.analogGain,
     digitalGain: gains.digitalGain,
+    adcBits: gains.adcBits,
   };
 }
 
@@ -453,7 +473,7 @@ function buildGpuParams({ readouts = activeReadoutConfigs(), outputWidth = rende
     appState.simulation.black,
     seed,
     pixelTypeId(),
-    adcLevels(),
+    adcLevels(primary.adcBits),
     viewModeId(),
     sensorValue("SensorFWC", 10000),
     primary.sensorRN,
@@ -648,7 +668,7 @@ function adcCodeToSignalFloat(adcCode, params) {
 
 function simulationParams(readout = readoutConfig()) {
   return {
-    levels: adcLevels(),
+    levels: adcLevels(readout.adcBits),
     eit: eitScale(),
     analogGain: readout.analogGain ?? analogGainScale(),
     digitalGain: readout.digitalGain ?? digitalGainScale(),
@@ -717,8 +737,13 @@ function currentSensorPrs() {
     },
     IDCGGains: {
       ShotAnalogGain: appState.simulation.idcgShotAnalogGain,
+      ShotDigitalGain: appState.simulation.idcgShotDigitalGain,
       LongAnalogGain: appState.simulation.idcgLongAnalogGain,
       LongDigitalGain: appState.simulation.idcgLongDigitalGain,
+    },
+    IDCGADCBits: {
+      Shot: appState.simulation.idcgShotAdcBits,
+      Long: appState.simulation.idcgLongAdcBits,
     },
     Seeds: { ...(appState.sensor.Seeds || {}) },
     Notes: appState.sensor.Notes || [],
@@ -733,7 +758,7 @@ function saveSensorPrs() {
 }
 
 function saveAdcRawForReadout(readout) {
-  const adcBits = Number(appState.simulation.adcBits);
+  const adcBits = Number(readout.adcBits ?? appState.simulation.adcBits);
   const params = simulationParams(readout);
   const buffer = new ArrayBuffer(activeMosaic.length * Uint16Array.BYTES_PER_ELEMENT);
   const output = new DataView(buffer);
@@ -754,8 +779,8 @@ function saveAdcRawResult() {
   const readouts = activeReadoutConfigs();
   const saved = readouts.map((readout) => saveAdcRawForReadout(readout));
   const files = saved.map((item) => item.filename).join(", ");
-  const range = saved[0]?.params?.levels ?? adcLevels();
-  statusEl.textContent = `Saved ADC RAW locally: ${files}. ${inputMeta.width}x${inputMeta.height}, uint16 little-endian, valid range 0-${range}.`;
+  const ranges = saved.map((item) => `${item.filename}: 0-${item.params.levels}`).join(" / ");
+  statusEl.textContent = `Saved ADC RAW locally: ${files}. ${inputMeta.width}x${inputMeta.height}, uint16 little-endian, valid ranges ${ranges}.`;
 }
 
 function demosaicChannel(adcMap, x, y, targetChannel, width = inputMeta.width) {
@@ -784,7 +809,7 @@ function drawCpuPreview(targetContext = previewContext, readout = readoutConfig(
   const outputWidth = inputMeta.width;
   const image = targetContext.createImageData(outputWidth, inputMeta.height);
   const params = {
-    levels: adcLevels(),
+    levels: adcLevels(readout.adcBits),
     eit: eitScale(),
     analogGain: readout.analogGain ?? analogGainScale(),
     digitalGain: readout.digitalGain ?? digitalGainScale(),
@@ -984,7 +1009,7 @@ function drawHistogram() {
   }
 
   drawFittedText(
-    `ADC histogram - ${histogramScale} - ${appState.simulation.adcBits}-bit, saturated ${saturatedText}`,
+    `ADC histogram - ${histogramScale} - ${readouts.map((readout) => `${readout.name} ${readout.adcBits}b`).join(" / ")}, saturated ${saturatedText}`,
     10,
     height - 6,
     width - 20,
@@ -1018,8 +1043,6 @@ function drawSnrGraph() {
   const adcFullScale = Math.max(1e-9, adcFullScaleUv());
   const eit = Math.max(1e-9, eitScale());
   const black = Math.max(0, appState.simulation.black || 0);
-  const levels = adcLevels();
-  const usableCodes = Math.max(1, levels - pedestal);
   const readouts = activeReadoutConfigs();
   const colors = ["#9fd3bd", "#f0a15d"];
 
@@ -1028,6 +1051,8 @@ function drawSnrGraph() {
     const rn = Math.max(0, readout.sensorRN);
     const analogGain = Math.max(1e-9, readout.analogGain ?? analogGainScale());
     const digitalGain = Math.max(1e-9, readout.digitalGain ?? digitalGainScale());
+    const levels = adcLevels(readout.adcBits);
+    const usableCodes = Math.max(1, levels - pedestal);
     const quantStepElectron = adcFullScale / Math.max(cg * analogGain * usableCodes, 1e-9);
     const digitalQuantStepElectron = quantStepElectron / Math.max(digitalGain, 1e-9);
     const quantNoiseElectron = Math.sqrt(quantStepElectron ** 2 + digitalQuantStepElectron ** 2) / Math.sqrt(12);
@@ -1355,8 +1380,13 @@ function applySensorProfile(index, cgModeIndex = 0) {
   }
   if (profile.IDCGGains) {
     appState.simulation.idcgShotAnalogGain = Math.min(32, Math.max(1, Number(profile.IDCGGains.ShotAnalogGain ?? appState.simulation.idcgShotAnalogGain)));
+    appState.simulation.idcgShotDigitalGain = Math.min(32, Math.max(1, Number(profile.IDCGGains.ShotDigitalGain ?? appState.simulation.idcgShotDigitalGain)));
     appState.simulation.idcgLongAnalogGain = Math.min(32, Math.max(1, Number(profile.IDCGGains.LongAnalogGain ?? appState.simulation.idcgLongAnalogGain)));
     appState.simulation.idcgLongDigitalGain = Math.min(32, Math.max(1, Number(profile.IDCGGains.LongDigitalGain ?? appState.simulation.idcgLongDigitalGain)));
+  }
+  if (profile.IDCGADCBits) {
+    appState.simulation.idcgShotAdcBits = Math.min(16, Math.max(8, Number(profile.IDCGADCBits.Shot ?? appState.simulation.idcgShotAdcBits)));
+    appState.simulation.idcgLongAdcBits = Math.min(16, Math.max(8, Number(profile.IDCGADCBits.Long ?? appState.simulation.idcgLongAdcBits)));
   }
   activeSensor = appState.sensor;
   renderCgModeSelect(appState.sensor, activeCgModeIndex);
@@ -1655,7 +1685,8 @@ async function main() {
     }
     lastDrawMs = performance.now() - drawStart;
     updateDiagnostics(renderBackend, webGpuDetail);
-    statusEl.textContent = `${activeInputLabel}. ${appState.sensor.SensorName}. ADC ${appState.simulation.adcBits}-bit (${adcLevels() + 1} codes). ${renderBackend}. ${webGpuDetail} Processing is client-side only.`;
+    const readoutBitsText = activeReadoutConfigs().map((readout) => `${readout.name} ${readout.adcBits}-bit`).join(" / ");
+    statusEl.textContent = `${activeInputLabel}. ${appState.sensor.SensorName}. ADC ${readoutBitsText}. ${renderBackend}. ${webGpuDetail} Processing is client-side only.`;
   }
 
   async function loadServerSample(input) {
@@ -1722,6 +1753,7 @@ async function main() {
     "simulation.analogGain",
     "simulation.digitalGain",
     "simulation.idcgShotAnalogGain",
+    "simulation.idcgShotDigitalGain",
     "simulation.idcgLongAnalogGain",
     "simulation.idcgLongDigitalGain",
   ]) {
@@ -1810,9 +1842,16 @@ async function main() {
   };
   panelResizer.addEventListener("pointerup", stopPanelResize);
   panelResizer.addEventListener("pointercancel", stopPanelResize);
-  [pixelTypeSelect, pixelOrderSelect, adcBitsSelect, viewModeSelect].forEach((control) => {
+  [pixelTypeSelect, pixelOrderSelect, adcBitsSelect, idcgShotAdcBitsSelect, idcgLongAdcBitsSelect, viewModeSelect].forEach((control) => {
     control.addEventListener("change", async () => {
-      syncStateFromControls(["input.pixelType", "input.pixelOrder", "simulation.adcBits", "view.mode"]);
+      syncStateFromControls([
+        "input.pixelType",
+        "input.pixelOrder",
+        "simulation.adcBits",
+        "simulation.idcgShotAdcBits",
+        "simulation.idcgLongAdcBits",
+        "view.mode",
+      ]);
       updateSensorEffective();
       if (activeSource?.kind === "hdr_scene_rgb") {
         uploadInput(sampleHdrRgbToSensorMosaic(activeSource.hdr));
@@ -1875,7 +1914,8 @@ async function main() {
     }
   });
   saveSimulationResultButton.addEventListener("click", () => {
-    statusEl.textContent = `Saving ADC RAW locally: ${inputMeta.width}x${inputMeta.height}, ${appState.simulation.adcBits}-bit into uint16 raw...`;
+    const readoutBitsText = activeReadoutConfigs().map((readout) => `${readout.name} ${readout.adcBits}-bit`).join(" / ");
+    statusEl.textContent = `Saving ADC RAW locally: ${inputMeta.width}x${inputMeta.height}, ${readoutBitsText} into uint16 raw...`;
     setTimeout(() => {
       try {
         saveAdcRawResult();
