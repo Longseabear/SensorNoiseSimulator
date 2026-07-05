@@ -972,7 +972,7 @@ function drawSnrGraph() {
     const adcClipElectron = normalizedClip * adcFullScale / Math.max(cg * analogGain, 1e-9);
     const effectiveCollectedFwc = Math.max(1e-9, Math.min(fwc, adcClipElectron));
     const effectiveInputFwc = Math.max(1e-9, effectiveCollectedFwc / eit);
-    return { readout, cg, rn, quantNoiseElectron, effectiveInputFwc };
+    return { readout, cg, rn, quantNoiseElectron, effectiveCollectedFwc, effectiveInputFwc };
   });
 
   const maxEffectiveInputFwc = Math.max(...models.map((model) => model.effectiveInputFwc), 1);
@@ -983,12 +983,13 @@ function drawSnrGraph() {
 
   function snrDb(inputElectron, model) {
     const collectedElectron = Math.max(0, inputElectron * eit);
+    const outputSignalElectron = Math.min(collectedElectron, model.effectiveCollectedFwc);
     const shotVariance = collectedElectron;
     const rnVariance = model.rn * model.rn;
     const prnuVariance = (prnu * collectedElectron) ** 2;
     const quantVariance = model.quantNoiseElectron * model.quantNoiseElectron;
     const noise = Math.sqrt(shotVariance + rnVariance + prnuVariance + quantVariance);
-    const snr = collectedElectron / Math.max(noise, 1e-12);
+    const snr = outputSignalElectron / Math.max(noise, 1e-12);
     return 20 * Math.log10(Math.max(snr, 1e-12));
   }
 
@@ -1071,6 +1072,25 @@ function drawSnrGraph() {
       else histogramContext.lineTo(x, y);
     });
     histogramContext.stroke();
+
+    const clipX = xForElectron(curve.effectiveInputFwc);
+    if (clipX >= padding.left && clipX <= padding.left + plotWidth) {
+      histogramContext.strokeStyle = color;
+      histogramContext.setLineDash([3, 3]);
+      histogramContext.beginPath();
+      histogramContext.moveTo(clipX, padding.top);
+      histogramContext.lineTo(clipX, padding.top + plotHeight);
+      histogramContext.stroke();
+      histogramContext.setLineDash([]);
+      drawFittedText(
+        `${curve.readout.name} sat`,
+        Math.min(clipX + 4, padding.left + plotWidth - width * 0.16),
+        padding.top + smallFont,
+        width * 0.16,
+        smallFont,
+        color,
+      );
+    }
 
     if (curve.snrOneElectron != null) {
       const markerX = xForElectron(curve.snrOneElectron);
