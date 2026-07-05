@@ -980,16 +980,19 @@ function drawSnrGraph() {
   const maxElectron = Math.max(minElectron * 10, maxEffectiveInputFwc);
   const minLog = Math.log10(minElectron);
   const maxLog = Math.log10(maxElectron);
+  const clippedDb = -60;
 
   function snrDb(inputElectron, model) {
+    if (inputElectron > model.effectiveInputFwc) {
+      return clippedDb;
+    }
     const collectedElectron = Math.max(0, inputElectron * eit);
-    const outputSignalElectron = Math.min(collectedElectron, model.effectiveCollectedFwc);
     const shotVariance = collectedElectron;
     const rnVariance = model.rn * model.rn;
     const prnuVariance = (prnu * collectedElectron) ** 2;
     const quantVariance = model.quantNoiseElectron * model.quantNoiseElectron;
     const noise = Math.sqrt(shotVariance + rnVariance + prnuVariance + quantVariance);
-    const snr = outputSignalElectron / Math.max(noise, 1e-12);
+    const snr = collectedElectron / Math.max(noise, 1e-12);
     return 20 * Math.log10(Math.max(snr, 1e-12));
   }
 
@@ -999,9 +1002,18 @@ function drawSnrGraph() {
     const points = [];
     let snrOneElectron = null;
     let previousPoint = null;
+    let insertedClipWall = false;
     for (let i = 0; i < plotWidth; i += 1) {
       const t = i / Math.max(1, plotWidth - 1);
       const electron = 10 ** (minLog + t * (maxLog - minLog));
+      if (!insertedClipWall && previousPoint && previousPoint.electron < model.effectiveInputFwc && electron > model.effectiveInputFwc) {
+        const peakDb = snrDb(model.effectiveInputFwc, model);
+        points.push({ electron: model.effectiveInputFwc, db: peakDb });
+        points.push({ electron: model.effectiveInputFwc * 1.000001, db: clippedDb });
+        minDb = Math.min(minDb, clippedDb);
+        maxDb = Math.max(maxDb, peakDb);
+        insertedClipWall = true;
+      }
       const db = snrDb(electron, model);
       points.push({ electron, db });
       if (previousPoint && snrOneElectron == null && previousPoint.db <= 0 && db >= 0) {
