@@ -133,6 +133,10 @@ The realtime viewer should not depend on server-side Python execution. Pyodide
 may be useful for experiments or demos, but it is not the main interactive ISP
 runtime.
 
+The initial package lives in `src/sensor_noise_simulator` and provides both a
+library API and the `sensor-noise-sim` CLI. See
+[docs/python-library.md](docs/python-library.md).
+
 ## WebGPU Realtime Engine
 
 The WebGPU implementation should prioritize interactive response:
