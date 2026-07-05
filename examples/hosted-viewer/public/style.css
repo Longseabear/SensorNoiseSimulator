@@ -159,6 +159,7 @@ body {
   right: 0;
   bottom: 0;
   overflow: hidden;
+  contain: layout paint size;
 }
 
 .readout-pane-b {
@@ -196,6 +197,8 @@ body {
   display: block;
   transform-origin: 0 0;
   image-rendering: pixelated;
+  backface-visibility: hidden;
+  will-change: transform;
 }
 
 #viewer,

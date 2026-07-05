@@ -195,6 +195,7 @@ let activeSensor = appState.sensor;
 let activeCgModeIndex = 0;
 let view = { scale: 1, x: 0, y: 0 };
 let panStart = null;
+let zoomFrame = 0;
 
 function syncStateFromControl(path) {
   syncStateFromControlValue(appState, parameterSchema, path);
@@ -534,12 +535,23 @@ function updateSensorEffective() {
 }
 
 function updateCanvasZoom() {
-  updateReadoutLabels();
   for (const target of [canvas, previewCanvas, canvasB, previewCanvasB]) {
     target.style.width = `${inputMeta.width}px`;
     target.style.height = `${inputMeta.height}px`;
     target.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
   }
+}
+
+function scheduleCanvasZoom() {
+  if (zoomFrame) return;
+  zoomFrame = requestAnimationFrame(() => {
+    zoomFrame = 0;
+    updateCanvasZoom();
+  });
+}
+
+function panGain() {
+  return Math.max(1, Math.min(12, Math.sqrt(Math.max(1, view.scale)) * 2));
 }
 
 function sensorMaskCpu(x, y) {
@@ -1678,15 +1690,17 @@ async function main() {
     { passive: false },
   );
   viewport.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
     viewport.setPointerCapture(event.pointerId);
     viewport.classList.add("is-panning");
     panStart = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, viewX: view.x, viewY: view.y };
   });
   viewport.addEventListener("pointermove", (event) => {
     if (!panStart || panStart.pointerId !== event.pointerId) return;
-    view.x = panStart.viewX + event.clientX - panStart.x;
-    view.y = panStart.viewY + event.clientY - panStart.y;
-    updateCanvasZoom();
+    const gain = panGain();
+    view.x = panStart.viewX + (event.clientX - panStart.x) * gain;
+    view.y = panStart.viewY + (event.clientY - panStart.y) * gain;
+    scheduleCanvasZoom();
   });
   viewport.addEventListener("pointerup", (event) => {
     if (panStart?.pointerId === event.pointerId) {
