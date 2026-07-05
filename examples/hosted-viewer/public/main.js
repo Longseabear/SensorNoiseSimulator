@@ -512,6 +512,10 @@ function buildGpuParams({ readouts = activeReadoutConfigs(), outputWidth = rende
     secondary.readNoiseSeed,
     sensorValue("SensorDark", 0),
     sensorSeed("Dark", 1003),
+    sensorSeed("PRNU", 1001),
+    sensorSeed("PFPN", 1002),
+    sensorSeed("ShotNoise", 2001),
+    0,
   ]);
 }
 

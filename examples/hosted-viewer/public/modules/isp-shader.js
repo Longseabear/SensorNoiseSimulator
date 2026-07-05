@@ -29,6 +29,10 @@ struct Params {
   readNoiseSeed2: f32,
   sensorDark: f32,
   darkSeed: f32,
+  prnuSeed: f32,
+  pfpnSeed: f32,
+  shotSeed: f32,
+  _pad0: f32,
 };
 
 @group(0) @binding(0) var rawTex: texture_2d<f32>;
@@ -102,7 +106,7 @@ fn readoutSeed(coord: vec2u) -> f32 {
 }
 
 fn hashWithSeed(p: vec2f, noiseSeed: f32) -> f32 {
-  let h = dot(p, vec2f(127.1, 311.7)) + params.seed + noiseSeed;
+  let h = dot(p, vec2f(127.1, 311.7)) + noiseSeed;
   return fract(sin(h) * 43758.5453123);
 }
 
@@ -110,8 +114,20 @@ fn centeredHashWithSeed(p: vec2f, noiseSeed: f32) -> f32 {
   return hashWithSeed(p, noiseSeed) * 2.0 - 1.0;
 }
 
-fn centeredHash(p: vec2f) -> f32 {
-  return centeredHashWithSeed(p, 0.0);
+fn gaussianLike(p: vec2f, noiseSeed: f32) -> f32 {
+  var sum = 0.0;
+  for (var i = 0u; i < 6u; i = i + 1u) {
+    let fi = f32(i);
+    let raw = sin(p.x * (127.1 + fi * 31.7) + p.y * (311.7 + fi * 17.3) + noiseSeed + fi * 101.9) * 43758.5453;
+    sum = sum + fract(raw);
+  }
+  return (sum - 3.0) / sqrt(0.5);
+}
+
+fn ditherForPixel(coord: vec2u) -> f32 {
+  let p = vec2f(coord);
+  let raw = sin(p.x * 419.2 + p.y * 173.7 + params.seed + 991.13) * 32719.917;
+  return fract(raw) - 0.5;
 }
 
 fn sensorChannel(coord: vec2u) -> u32 {
@@ -161,11 +177,12 @@ fn adcCodeFloat(coord: vec2u) -> f32 {
   let photon = textureLoad(rawTex, src, 0).r;
   let signalElectron = max(0.0, photon * params.sensorFWC * params.eit);
   let cg = max(readoutCG(coord), 1e-6);
-  let prnu = signalElectron * params.sensorPRNU * centeredHash(vec2f(src) + vec2f(11.0, 23.0));
-  let shot = sqrt(max(signalElectron, 0.0)) * centeredHash(vec2f(src) + vec2f(31.0, 47.0));
-  let rn = readoutRN(coord) * centeredHashWithSeed(vec2f(src) + vec2f(53.0, 71.0), readoutSeed(coord));
-  let pfpn = (params.sensorPFPN / cg) * centeredHash(vec2f(src) + vec2f(79.0, 97.0));
-  let dark = params.sensorDark * max(params.eit, 0.0) * centeredHashWithSeed(vec2f(src) + vec2f(127.0, 139.0), params.darkSeed);
+  let srcf = vec2f(src);
+  let prnu = signalElectron * params.sensorPRNU * gaussianLike(srcf, params.prnuSeed);
+  let shot = sqrt(max(signalElectron, 0.0)) * gaussianLike(srcf, params.shotSeed);
+  let rn = readoutRN(coord) * gaussianLike(srcf, readoutSeed(coord));
+  let pfpn = (params.sensorPFPN / cg) * gaussianLike(srcf, params.pfpnSeed);
+  let dark = params.sensorDark * max(params.eit, 0.0) * gaussianLike(srcf, params.darkSeed);
   let electron = signalElectron + prnu + shot + rn + pfpn + dark;
   let voltage = electron * cg * params.analogGain;
   let normalizedSignal = voltage / max(params.adcFullScale, 1e-6) - params.black;
@@ -176,7 +193,7 @@ fn adcSample(coord: vec2u) -> f32 {
   var adcCode = floor(adcCodeFloat(coord));
   if (abs(params.digitalGain - 1.0) > 1e-6) {
     let src = sourceCoord(coord);
-    let dither = centeredHash(vec2f(src) + vec2f(101.0, 113.0)) * 0.5;
+    let dither = ditherForPixel(src);
     let signalCode = adcCode - params.pedestal;
     adcCode = round(params.pedestal + signalCode * params.digitalGain + dither);
   }
@@ -242,11 +259,12 @@ fn fs(in: VertexOut) -> @location(0) vec4f {
     let photon = textureLoad(rawTex, src, 0).r;
     let signalElectron = max(0.0, photon * params.sensorFWC * params.eit);
     let cg = max(readoutCG(coord), 1e-6);
-    let noise = signalElectron * params.sensorPRNU * centeredHash(vec2f(src) + vec2f(11.0, 23.0))
-      + sqrt(max(signalElectron, 0.0)) * centeredHash(vec2f(src) + vec2f(31.0, 47.0))
-      + readoutRN(coord) * centeredHashWithSeed(vec2f(src) + vec2f(53.0, 71.0), readoutSeed(coord))
-      + (params.sensorPFPN / cg) * centeredHash(vec2f(src) + vec2f(79.0, 97.0))
-      + params.sensorDark * max(params.eit, 0.0) * centeredHashWithSeed(vec2f(src) + vec2f(127.0, 139.0), params.darkSeed);
+    let srcf = vec2f(src);
+    let noise = signalElectron * params.sensorPRNU * gaussianLike(srcf, params.prnuSeed)
+      + sqrt(max(signalElectron, 0.0)) * gaussianLike(srcf, params.shotSeed)
+      + readoutRN(coord) * gaussianLike(srcf, readoutSeed(coord))
+      + (params.sensorPFPN / cg) * gaussianLike(srcf, params.pfpnSeed)
+      + params.sensorDark * max(params.eit, 0.0) * gaussianLike(srcf, params.darkSeed);
     let sigma = max(1e-6, sqrt(max(signalElectron, 0.0) + readoutRN(coord) * readoutRN(coord) + pow(params.sensorPRNU * signalElectron, 2.0) + pow(params.sensorPFPN / cg, 2.0) + pow(params.sensorDark * max(params.eit, 0.0), 2.0)));
     let value = clamp(0.5 + noise / (6.0 * sigma), 0.0, 1.0);
     return vec4f(vec3f(value), 1.0);
