@@ -174,7 +174,7 @@ const appState = {
     SensorPRNU: 0,
     SensorPFPN: 0,
     SensorDark: 0,
-    Pedestal: 0,
+    Pedestal: 64,
     ADCFullScale: 10000,
     Seeds: { ReadNoise: 3001 },
   },
@@ -364,6 +364,10 @@ function adcLevels(bits = appState.simulation.adcBits) {
   return 2 ** Number(bits) - 1;
 }
 
+function pedestalForAdcBits(bits = appState.simulation.adcBits) {
+  return 2 ** Math.max(0, Number(bits) - 4);
+}
+
 function viewModeId() {
   return Number(appState.view.mode);
 }
@@ -480,7 +484,7 @@ function buildGpuParams({ readouts = activeReadoutConfigs(), outputWidth = rende
     primary.sensorCG,
     sensorValue("SensorPRNU", 0),
     sensorValue("SensorPFPN", 0),
-    sensorValue("Pedestal", 0),
+    pedestalForAdcBits(primary.adcBits),
     adcFullScaleUv(),
     appState.simpleIsp.wbR || 1,
     appState.simpleIsp.wbB || 1,
@@ -570,6 +574,7 @@ function syncSensorInputFromSlider(key) {
 function updateSensorEditor() {
   activeSensor = appState.sensor;
   appState.sensor.ADCFullScale = adcFullScaleUv();
+  appState.sensor.Pedestal = pedestalForAdcBits(activeReadoutConfigs()[0]?.adcBits);
   for (const [key, input] of Object.entries(sensorInputs)) {
     input.value = String(appState.sensor?.[key] ?? 0);
     syncSensorSliderFromInput(key);
@@ -580,8 +585,10 @@ function updateSensorEditor() {
 function readSensorEditor() {
   appState.sensor = { ...appState.sensor };
   for (const [key, input] of Object.entries(sensorInputs)) {
+    if (key === "Pedestal") continue;
     appState.sensor[key] = Number(input.value);
   }
+  appState.sensor.Pedestal = pedestalForAdcBits(activeReadoutConfigs()[0]?.adcBits);
   appState.sensor.ADCFullScale = adcFullScaleUv();
   sensorInputs.ADCFullScale.value = formatSensorValue("ADCFullScale", appState.sensor.ADCFullScale);
   syncSensorSliderFromInput("ADCFullScale");
@@ -589,16 +596,25 @@ function readSensorEditor() {
   updateSensorEffective();
 }
 
+function updatePedestalDisplay(bits = activeReadoutConfigs()[0]?.adcBits) {
+  const pedestal = pedestalForAdcBits(bits);
+  appState.sensor.Pedestal = pedestal;
+  sensorInputs.Pedestal.value = formatSensorValue("Pedestal", pedestal);
+  syncSensorSliderFromInput("Pedestal");
+}
+
 function updateSensorEffective() {
-  const adcMax = adcLevels();
+  const primary = activeReadoutConfigs()[0] || readoutConfig();
+  const adcMax = adcLevels(primary.adcBits);
   const fwc = sensorValue("SensorFWC", 0);
   const cg = sensorValue("SensorCG", 1);
-  const pedestal = sensorValue("Pedestal", 0);
+  const pedestal = pedestalForAdcBits(primary.adcBits);
   const adcFullScale = adcFullScaleUv();
   const fwcVoltage = fwc * cg;
   const fwcCode = pedestal + (fwcVoltage / Math.max(adcFullScale, 1e-9)) * Math.max(0, adcMax - pedestal);
   const mode = appState.sensor.ActiveCGMode ? `${appState.sensor.ActiveCGMode}: ` : "";
-  sensorEffectiveEl.textContent = `${mode}photon 1.0 maps to ${fwc.toFixed(1)} e- / ${fwcVoltage.toFixed(1)} uV. ADC full-scale ${adcFullScale.toFixed(1)} uV, FWC maps to ${fwcCode.toFixed(1)} LSB.`;
+  updatePedestalDisplay(primary.adcBits);
+  sensorEffectiveEl.textContent = `${mode}photon 1.0 maps to ${fwc.toFixed(1)} e- / ${fwcVoltage.toFixed(1)} uV. ADC full-scale ${adcFullScale.toFixed(1)} uV, pedestal ${pedestal.toFixed(0)} LSB (${primary.adcBits}b), FWC maps to ${fwcCode.toFixed(1)} LSB.`;
 }
 
 function updateCanvasZoom() {
@@ -675,7 +691,7 @@ function simulationParams(readout = readoutConfig()) {
     black: appState.simulation.black,
     sensorFWC: sensorValue("SensorFWC", 10000),
     readout,
-    pedestal: sensorValue("Pedestal", 0),
+    pedestal: pedestalForAdcBits(readout.adcBits),
     adcFullScale: adcFullScaleUv(),
   };
 }
@@ -724,7 +740,7 @@ function currentSensorPrs() {
     SensorCG: sensorValue("SensorCG", 1),
     SensorPFPN: sensorValue("SensorPFPN", 0),
     SensorDark: sensorValue("SensorDark", 0),
-    Pedestal: sensorValue("Pedestal", 0),
+    Pedestal: pedestalForAdcBits(activeReadoutConfigs()[0]?.adcBits),
     ADCFullScale: adcFullScaleUv(),
     CGModes: (appState.sensor.CGModes || []).slice(0, 4),
     ActiveCGMode: appState.sensor.ActiveCGMode || null,
@@ -816,7 +832,7 @@ function drawCpuPreview(targetContext = previewContext, readout = readoutConfig(
     black: appState.simulation.black,
     sensorFWC: sensorValue("SensorFWC", 10000),
     readout,
-    pedestal: sensorValue("Pedestal", 0),
+    pedestal: pedestalForAdcBits(readout.adcBits),
     adcFullScale: adcFullScaleUv(),
   };
   const errorMode = viewModeId() === 1;
@@ -1039,7 +1055,6 @@ function drawSnrGraph() {
 
   const fwc = Math.max(1, sensorValue("SensorFWC", 10000));
   const prnu = Math.max(0, sensorValue("SensorPRNU", 0));
-  const pedestal = sensorValue("Pedestal", 0);
   const adcFullScale = Math.max(1e-9, adcFullScaleUv());
   const eit = Math.max(1e-9, eitScale());
   const black = Math.max(0, appState.simulation.black || 0);
@@ -1052,6 +1067,7 @@ function drawSnrGraph() {
     const analogGain = Math.max(1e-9, readout.analogGain ?? analogGainScale());
     const digitalGain = Math.max(1e-9, readout.digitalGain ?? digitalGainScale());
     const levels = adcLevels(readout.adcBits);
+    const pedestal = pedestalForAdcBits(readout.adcBits);
     const usableCodes = Math.max(1, levels - pedestal);
     const quantStepElectron = adcFullScale / Math.max(cg * analogGain * usableCodes, 1e-9);
     const digitalQuantStepElectron = quantStepElectron / Math.max(digitalGain, 1e-9);
