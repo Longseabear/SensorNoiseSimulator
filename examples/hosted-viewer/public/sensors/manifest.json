@@ -1,0 +1,12 @@
+{
+  "kind": "sensor_prs_manifest",
+  "schema": "SensorPRS",
+  "version": 1,
+  "sensors": [
+    {
+      "uri": "./sensors/BasicSensor.sensor-prs.json",
+      "SensorName": "BasicSensor",
+      "role": "multi-CG"
+    }
+  ]
+}

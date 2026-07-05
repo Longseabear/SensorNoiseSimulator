@@ -1,0 +1,61 @@
+{
+  "kind": "hdr_scene_rgb_test_set",
+  "generatedBy": "scripts/generate-test-hdrs.mjs",
+  "inputs": [
+    {
+      "kind": "hdr_scene_rgb",
+      "uri": "./assets/test-inputs/linear_photon_ramp_512x256.hdr",
+      "label": "Linear photon ramp",
+      "purpose": "Uniform 0..1 photon ramp for ADC histogram sanity checks",
+      "photonWhitePoint": 1
+    },
+    {
+      "kind": "hdr_scene_rgb",
+      "uri": "./assets/test-inputs/gradient_ramp_512x256.hdr",
+      "label": "Gradient ramp",
+      "purpose": "Exposure, EIT, gain, gamma, and banding checks"
+    },
+    {
+      "kind": "hdr_scene_rgb",
+      "uri": "./assets/test-inputs/low_light_noise_512x256.hdr",
+      "label": "Low light",
+      "purpose": "Read-noise and shadow response checks"
+    },
+    {
+      "kind": "hdr_scene_rgb",
+      "uri": "./assets/test-inputs/highlight_clip_512x256.hdr",
+      "label": "Highlight clip",
+      "purpose": "Saturation, ADC clipping, and tone-map checks"
+    },
+    {
+      "kind": "hdr_scene_rgb",
+      "uri": "./assets/test-inputs/color_patches_512x256.hdr",
+      "label": "Color patches",
+      "purpose": "White balance, color matrix, and exposure bracket checks"
+    },
+    {
+      "kind": "hdr_scene_rgb",
+      "uri": "./assets/studio_small_08_1k.hdr",
+      "label": "Studio Small 08 HDRI",
+      "purpose": "Downloaded CC0 HDRI sample for real-world HDR scene input"
+    },
+    {
+      "kind": "hdr_scene_rgb",
+      "uri": "./assets/afrikaans_church_interior_1k.hdr",
+      "label": "Afrikaans Church Interior HDRI",
+      "purpose": "Downloaded CC0 high-contrast church interior HDR scene"
+    },
+    {
+      "kind": "hdr_scene_rgb",
+      "uri": "./assets/memorial_church_debevec.hdr",
+      "label": "Memorial Church Perspective HDR",
+      "purpose": "Perspective HDR research radiance map from Debevec and Malik"
+    },
+    {
+      "kind": "hdr_scene_rgb",
+      "uri": "./assets/rend12_gward_6144.hdr",
+      "label": "Greg Ward rend12 stress HDR 6144",
+      "purpose": "61 MB Radiance RGBE stress-test input from Greg Ward HDR encoding examples"
+    }
+  ]
+}

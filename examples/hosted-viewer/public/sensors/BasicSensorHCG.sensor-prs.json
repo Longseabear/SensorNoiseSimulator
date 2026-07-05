@@ -1,0 +1,37 @@
+{
+  "schema": "SensorPRS",
+  "version": 1,
+  "SensorName": "BasicSensorHCG",
+  "Description": "Basic high conversion gain sensor profile. CG is 64x LCG and RN is 1/64 of LCG.",
+  "Units": {
+    "SensorFWC": "e-",
+    "SensorRN": "e-",
+    "SensorPRNU": "ratio",
+    "SensorCG": "uV/e-",
+    "SensorPFPN": "uV",
+    "SensorDark": "e-/s",
+    "Pedestal": "LSB",
+    "ADCFullScale": "uV"
+  },
+  "SensorFWC": 10000,
+  "SensorRN": 1,
+  "SensorPRNU": 0.01,
+  "SensorCG": 64,
+  "SensorPFPN": 0.5,
+  "SensorDark": 0.1,
+  "Pedestal": 64,
+  "ADCFullScale": 640000,
+  "Seeds": {
+    "PRNU": 1001,
+    "PFPN": 1002,
+    "Dark": 1003,
+    "ShotNoise": 2001,
+    "ReadNoise": 3002
+  },
+  "Notes": [
+    "SensorCG is 64x BasicSensorLCG.",
+    "SensorRN is 1/64 of BasicSensorLCG.",
+    "ShotNoise seed is shared with BasicSensorLCG for LCG/HCG HDR simulations.",
+    "ReadNoise seed differs from BasicSensorLCG because read-noise sources belong to the readout path."
+  ]
+}

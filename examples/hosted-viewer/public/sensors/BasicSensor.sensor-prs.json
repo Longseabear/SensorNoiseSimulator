@@ -1,0 +1,57 @@
+{
+  "schema": "SensorPRS",
+  "version": 2,
+  "SensorName": "BasicSensor",
+  "Description": "Basic sensor profile with selectable conversion-gain modes. Photon input 1.0 maps to SensorFWC electrons.",
+  "Units": {
+    "SensorFWC": "e-",
+    "SensorRN": "e-",
+    "SensorPRNU": "ratio",
+    "SensorCG": "uV/e-",
+    "SensorPFPN": "uV",
+    "SensorDark": "e-/s",
+    "Pedestal": "LSB",
+    "ADCFullScale": "uV"
+  },
+  "SensorFWC": 10000,
+  "SensorRN": 64,
+  "SensorPRNU": 0.01,
+  "SensorCG": 1,
+  "SensorPFPN": 0.5,
+  "SensorDark": 0.1,
+  "Pedestal": 64,
+  "ADCFullScale": 10000,
+  "CGModes": [
+    {
+      "Name": "LCG",
+      "SensorCG": 1,
+      "SensorRN": 64,
+      "ADCFullScale": 10000,
+      "Seeds": {
+        "ReadNoise": 3001
+      }
+    },
+    {
+      "Name": "HCG",
+      "SensorCG": 64,
+      "SensorRN": 1,
+      "ADCFullScale": 10000,
+      "Seeds": {
+        "ReadNoise": 3002
+      }
+    }
+  ],
+  "Seeds": {
+    "PRNU": 1001,
+    "PFPN": 1002,
+    "Dark": 1003,
+    "ShotNoise": 2001,
+    "ReadNoise": 3001
+  },
+  "Notes": [
+    "Sensor has selectable conversion-gain modes.",
+    "ADCFullScale is aligned to the LCG full-well baseline.",
+    "ShotNoise seed is shared across CG modes for LCG/HCG HDR simulations.",
+    "ReadNoise seed differs by CG mode because read-noise sources belong to the readout path."
+  ]
+}

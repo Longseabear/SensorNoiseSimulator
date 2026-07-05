@@ -1,0 +1,106 @@
+{
+  "kind": "bayer_raw_u16_test_set",
+  "generatedBy": "scripts/generate-test-raws.mjs",
+  "defaults": {
+    "width": 512,
+    "height": 256,
+    "byteOrder": "little-endian",
+    "sampleType": "uint16",
+    "blackLevel": 64,
+    "whiteLevel": 1023,
+    "pixelOrder": {
+      "id": 0,
+      "name": "GRBG"
+    }
+  },
+  "inputs": [
+    {
+      "kind": "bayer_raw_u16",
+      "uri": "./assets/test-inputs/raw/bayer_grbg_gradient_512x256_u16le.raw",
+      "label": "Bayer GRBG gradient",
+      "purpose": "2x2 Bayer demosaic, EIT, gain, and clipping checks",
+      "width": 512,
+      "height": 256,
+      "byteOrder": "little-endian",
+      "sampleType": "uint16",
+      "blackLevel": 64,
+      "whiteLevel": 1023,
+      "pixelOrder": {
+        "id": 0,
+        "name": "GRBG"
+      },
+      "pixelType": "Bayer",
+      "pixelPattern": [
+        "G R",
+        "B G"
+      ]
+    },
+    {
+      "kind": "bayer_raw_u16",
+      "uri": "./assets/test-inputs/raw/bayer_grbg_low_light_512x256_u16le.raw",
+      "label": "Bayer GRBG low light",
+      "purpose": "2x2 Bayer read-noise and shadow checks",
+      "width": 512,
+      "height": 256,
+      "byteOrder": "little-endian",
+      "sampleType": "uint16",
+      "blackLevel": 64,
+      "whiteLevel": 1023,
+      "pixelOrder": {
+        "id": 0,
+        "name": "GRBG"
+      },
+      "pixelType": "Bayer",
+      "pixelPattern": [
+        "G R",
+        "B G"
+      ]
+    },
+    {
+      "kind": "bayer_raw_u16",
+      "uri": "./assets/test-inputs/raw/tetra_grbg_low_light_512x256_u16le.raw",
+      "label": "Tetra GRBG low light",
+      "purpose": "Grouped same-color low-light checks",
+      "width": 512,
+      "height": 256,
+      "byteOrder": "little-endian",
+      "sampleType": "uint16",
+      "blackLevel": 64,
+      "whiteLevel": 1023,
+      "pixelOrder": {
+        "id": 0,
+        "name": "GRBG"
+      },
+      "pixelType": "Tetra",
+      "pixelPattern": [
+        "G G R R",
+        "G G R R",
+        "B B G G",
+        "B B G G"
+      ]
+    },
+    {
+      "kind": "bayer_raw_u16",
+      "uri": "./assets/test-inputs/raw/tetrasquare_grbg_color_512x256_u16le.raw",
+      "label": "TetraSquare GRBG color chart",
+      "purpose": "4x4 grouped color arrangement and color response checks",
+      "width": 512,
+      "height": 256,
+      "byteOrder": "little-endian",
+      "sampleType": "uint16",
+      "blackLevel": 64,
+      "whiteLevel": 1023,
+      "pixelOrder": {
+        "id": 0,
+        "name": "GRBG"
+      },
+      "pixelType": "TetraSquare",
+      "pixelPattern": [
+        "G G R R",
+        "G G R R",
+        "B B G G",
+        "B B G G"
+      ]
+    }
+  ]
+}

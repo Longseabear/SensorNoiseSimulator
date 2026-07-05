@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NoiseSimulator Hosted Viewer Example</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="viewer">
+        <div class="viewer-tabs" role="tablist" aria-label="Image viewer mode">
+          <button id="bayerViewerTab" class="viewer-tab is-active" type="button">Bayer viewer</button>
+          <button id="rgbViewerTab" class="viewer-tab" type="button">Simple ISP</button>
+        </div>
+        <div id="viewport" class="viewport">
+          <div id="backendBadge" class="backend-badge">Render: starting</div>
+          <div id="diagnostics" class="diagnostics">Diagnostics: starting</div>
+          <div id="readoutLabelA" class="readout-label readout-label-a"></div>
+          <div id="readoutLabelB" class="readout-label readout-label-b"></div>
+          <canvas id="viewer" width="768" height="512"></canvas>
+          <canvas id="viewer2d" width="768" height="512"></canvas>
+        </div>
+        <div class="histogram-panel">
+          <div class="histogram-tabs" role="tablist" aria-label="Histogram scale">
+            <button id="histLog" class="hist-tab is-active" type="button">Log</button>
+            <button id="histLinear" class="hist-tab" type="button">Linear</button>
+            <button id="histSnr" class="hist-tab" type="button">SNR</button>
+          </div>
+          <canvas id="histogram" width="512" height="120"></canvas>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <div id="panelResizer" class="panel-resizer" title="Resize panel"></div>
+        <header>
+          <h1>ISP Viewer</h1>
+          <p>Static server, client-side processing. WebGPU is used when available.</p>
+        </header>
+
+        <section class="primary-actions" aria-label="Save">
+          <button id="saveSimulationResult" class="primary-action" type="button">Save ADC RAW</button>
+          <button id="saveSensorProfile" type="button">Save Sensor PRS</button>
+        </section>
+
+        <nav class="settings-tabs" aria-label="Settings">
+          <button id="inputSettingsTab" class="settings-tab is-active" type="button">Input</button>
+          <button id="sensorSettingsTab" class="settings-tab" type="button" title="Sensor Characteristics">Sensor Char.</button>
+          <button id="sensorControlSettingsTab" class="settings-tab" type="button" title="Sensor Control">Sensor Ctrl.</button>
+          <button id="ispSettingsTab" class="settings-tab" type="button">ISP</button>
+        </nav>
+
+        <section id="inputSettingsPanel" class="settings-panel is-active">
+          <label>
+            Server sample
+            <select id="sample"></select>
+          </label>
+
+          <label>
+            Local image
+            <input id="localFile" type="file" accept=".hdr,.raw" />
+          </label>
+
+          <label>
+            Pixel type
+            <select id="pixelType">
+              <option value="Bayer">Bayer</option>
+              <option value="Tetra">Tetra</option>
+              <option value="TetraSquare">TetraSquare</option>
+            </select>
+          </label>
+
+          <label>
+            Pixel order
+            <select id="pixelOrder">
+              <option value="0">0 - GRBG</option>
+            </select>
+          </label>
+        </section>
+
+        <section id="sensorControlSettingsPanel" class="settings-panel capture-controls">
+          <label>
+            Acquisition mode
+            <select id="acquisitionMode">
+              <option value="single" selected>Single CG</option>
+              <option value="idcg">IDCG</option>
+            </select>
+          </label>
+          <label class="idcg-control">
+            CG A
+            <select id="idcgModeA"></select>
+          </label>
+          <label class="idcg-control">
+            CG B
+            <select id="idcgModeB"></select>
+          </label>
+          <label>
+            EIT scale
+            <input id="eit" type="range" min="-6" max="6" step="0.01" value="0" />
+            <input id="eitText" type="number" min="0.015625" max="64" step="0.001" value="1" />
+            <output id="eitValue">1.00x</output>
+          </label>
+
+          <label>
+            Analog gain
+            <input id="analogGain" type="range" min="0" max="5" step="0.01" value="0" />
+            <input id="analogGainText" type="number" min="1" max="32" step="0.001" value="1" />
+            <output id="analogGainValue">1.00x</output>
+          </label>
+
+          <label>
+            Digital gain
+            <input id="digitalGain" type="range" min="0" max="5" step="0.01" value="0" />
+            <input id="digitalGainText" type="number" min="1" max="32" step="0.001" value="1" />
+            <output id="digitalGainValue">1.00x</output>
+          </label>
+
+          <label>
+            ADC bit depth
+            <select id="adcBits">
+              <option value="8">8-bit</option>
+              <option value="9">9-bit</option>
+              <option value="10" selected>10-bit</option>
+              <option value="11">11-bit</option>
+              <option value="12">12-bit</option>
+              <option value="13">13-bit</option>
+              <option value="14">14-bit</option>
+              <option value="15">15-bit</option>
+              <option value="16">16-bit</option>
+            </select>
+          </label>
+
+          <label>
+            View mode
+            <select id="viewMode">
+              <option value="0" selected>Bayer viewer</option>
+              <option value="1">Quantization error</option>
+              <option value="2">Shader test</option>
+              <option value="3">Noise only</option>
+              <option value="4">Simple ISP</option>
+            </select>
+          </label>
+        </section>
+
+        <section id="sensorSettingsPanel" class="settings-panel">
+          <label>
+            Sensor PRS
+            <select id="sensorProfile"></select>
+          </label>
+
+          <label>
+            CG mode
+            <select id="sensorCgMode"></select>
+          </label>
+
+          <label>
+            Local Sensor PRS
+            <input id="localSensorProfile" type="file" accept=".json,.sensor-prs" />
+          </label>
+          <label>
+            FWC [e-]
+            <input id="sensorFWCSlider" type="range" min="2" max="6" step="0.001" />
+            <input id="sensorFWC" type="number" min="1" step="1" />
+          </label>
+          <label>
+            CG [uV/e-]
+            <input id="sensorCGSlider" type="range" min="-2" max="3" step="0.001" />
+            <input id="sensorCG" type="number" min="0.0001" step="0.0001" />
+          </label>
+          <label>
+            RN [e-]
+            <input id="sensorRNSlider" type="range" min="0" max="200" step="0.001" />
+            <input id="sensorRN" type="number" min="0" step="0.001" />
+          </label>
+          <label>
+            PRNU [ratio]
+            <input id="sensorPRNUSlider" type="range" min="0" max="0.2" step="0.0001" />
+            <input id="sensorPRNU" type="number" min="0" step="0.0001" />
+          </label>
+          <label>
+            PFPN [uV]
+            <input id="sensorPFPNSlider" type="range" min="0" max="1000" step="0.001" />
+            <input id="sensorPFPN" type="number" min="0" step="0.001" />
+          </label>
+          <label>
+            Dark [e-/s]
+            <input id="sensorDarkSlider" type="range" min="0" max="1000" step="0.001" />
+            <input id="sensorDark" type="number" min="0" step="0.001" />
+          </label>
+          <label>
+            Pedestal [LSB]
+            <input id="sensorPedestalSlider" type="range" min="0" max="4096" step="1" />
+            <input id="sensorPedestal" type="number" min="0" step="1" />
+          </label>
+          <label class="is-hidden-control">
+            ADC full-scale [uV]
+            <input id="sensorADCFullScaleSlider" type="range" min="2" max="6" step="0.001" />
+            <input id="sensorADCFullScale" type="number" min="1" step="1" />
+          </label>
+          <p id="sensorEffective" class="sensor-effective"></p>
+        </section>
+
+        <section id="ispSettingsPanel" class="settings-panel">
+          <label>
+            WB R
+            <input id="wbR" type="number" min="0.25" max="4" step="0.01" value="1" />
+          </label>
+          <label>
+            WB B
+            <input id="wbB" type="number" min="0.25" max="4" step="0.01" value="1" />
+          </label>
+          <label>
+            Gamma
+            <input id="gamma" type="number" min="1" max="4" step="0.01" value="2.2" />
+          </label>
+          <label>
+            Black level
+            <input id="black" type="range" min="0" max="0.2" step="0.001" value="0" />
+            <output id="blackValue">0.000</output>
+          </label>
+        </section>
+
+        <button id="seed">Refresh seed</button>
+        <button id="resetView">Reset view</button>
+        <p id="status" class="status">Loading WebGPU...</p>
+      </aside>
+    </main>
+
+    <script src="./modules/viewer-state.js"></script>
+    <script src="./modules/image-inputs.js"></script>
+    <script src="./modules/isp-shader.js"></script>
+    <script src="./main.js"></script>
+  </body>
+</html>

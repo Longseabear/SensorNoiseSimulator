@@ -1,0 +1,36 @@
+{
+  "schema": "SensorPRS",
+  "version": 1,
+  "SensorName": "BasicSensorLCG",
+  "Description": "Basic low conversion gain sensor profile. Photon input 1.0 maps to SensorFWC electrons.",
+  "Units": {
+    "SensorFWC": "e-",
+    "SensorRN": "e-",
+    "SensorPRNU": "ratio",
+    "SensorCG": "uV/e-",
+    "SensorPFPN": "uV",
+    "SensorDark": "e-/s",
+    "Pedestal": "LSB",
+    "ADCFullScale": "uV"
+  },
+  "SensorFWC": 10000,
+  "SensorRN": 64,
+  "SensorPRNU": 0.01,
+  "SensorCG": 1,
+  "SensorPFPN": 0.5,
+  "SensorDark": 0.1,
+  "Pedestal": 64,
+  "ADCFullScale": 10000,
+  "Seeds": {
+    "PRNU": 1001,
+    "PFPN": 1002,
+    "Dark": 1003,
+    "ShotNoise": 2001,
+    "ReadNoise": 3001
+  },
+  "Notes": [
+    "LCG and HCG profiles intentionally use separate read-noise seeds.",
+    "ShotNoise seed is shared with BasicSensorHCG for LCG/HCG HDR simulations.",
+    "PRNU/PFPN/Dark seeds are shared with BasicSensorHCG because fixed-pattern sources are sensor-position stable."
+  ]
+}
