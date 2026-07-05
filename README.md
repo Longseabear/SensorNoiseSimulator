@@ -208,6 +208,16 @@ Then open:
 http://localhost:5173
 ```
 
+Or run the same static viewer through Docker:
+
+```powershell
+docker build -t sensor-noise-simulator-viewer .
+docker run --rm -p 5173:5173 sensor-noise-simulator-viewer
+```
+
+For Docker Compose and configuration details, see
+[docs/docker.md](docs/docker.md).
+
 The EIT, analog gain, digital gain, ADC, SensorPRS, white-balance, gamma, black-level,
 and seed controls update the client-side render path. WebGPU is used when the
 browser exposes it; otherwise the hosted example falls back to a client-side 2D
