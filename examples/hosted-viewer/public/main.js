@@ -21,6 +21,9 @@ globalThis.__noiseBoot = "main script loaded";
 const canvas = document.querySelector("#viewer");
 const previewCanvas = document.querySelector("#viewer2d");
 const previewContext = previewCanvas.getContext("2d", { alpha: false });
+const canvasB = document.querySelector("#viewerB");
+const previewCanvasB = document.querySelector("#viewer2dB");
+const previewContextB = previewCanvasB.getContext("2d", { alpha: false });
 const viewport = document.querySelector("#viewport");
 const histogramCanvas = document.querySelector("#histogram");
 const histogramContext = histogramCanvas.getContext("2d");
@@ -219,7 +222,9 @@ function setLogStateFromText(path) {
 
 function setGpuVisible(enabled) {
   canvas.classList.toggle("is-active", enabled);
+  canvasB.classList.toggle("is-active", enabled && isIdcgMode());
   previewCanvas.classList.toggle("is-hidden", enabled);
+  previewCanvasB.classList.toggle("is-hidden", enabled);
 }
 
 function setBackendBadge(backend) {
@@ -384,15 +389,15 @@ function updateReadoutLabels() {
   readoutLabelB.textContent = readouts[1]?.name || "";
   readoutLabelA.classList.toggle("is-active", isIdcgMode());
   readoutLabelB.classList.toggle("is-active", isIdcgMode());
+  viewport.classList.toggle("is-idcg", isIdcgMode());
   document.querySelector("#sensorControlSettingsPanel").classList.toggle("is-idcg", isIdcgMode());
 }
 
-function buildGpuParams() {
-  const readouts = activeReadoutConfigs();
+function buildGpuParams({ readouts = activeReadoutConfigs(), outputWidth = renderWidth(), acquisitionMode = isIdcgMode() ? 1 : 0 } = {}) {
   const primary = readouts[0] || readoutConfig();
   const secondary = readouts[1] || primary;
   return new Float32Array([
-    renderWidth(),
+    outputWidth,
     inputMeta.height,
     appState.simulation.eit,
     appState.simulation.analogGain,
@@ -413,7 +418,7 @@ function buildGpuParams() {
     appState.simpleIsp.wbB || 1,
     appState.simpleIsp.gamma || 2.2,
     inputMeta.width,
-    isIdcgMode() ? 1 : 0,
+    acquisitionMode,
     secondary.sensorRN,
     secondary.sensorCG,
     primary.readNoiseSeed,
@@ -529,8 +534,9 @@ function updateSensorEffective() {
 }
 
 function updateCanvasZoom() {
-  for (const target of [canvas, previewCanvas]) {
-    target.style.width = `${renderWidth()}px`;
+  updateReadoutLabels();
+  for (const target of [canvas, previewCanvas, canvasB, previewCanvasB]) {
+    target.style.width = `${inputMeta.width}px`;
     target.style.height = `${inputMeta.height}px`;
     target.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
   }
@@ -710,9 +716,9 @@ function demosaicChannel(adcMap, x, y, targetChannel, width = inputMeta.width) {
   return adcMap[y * width + x];
 }
 
-function drawCpuPreview() {
-  const outputWidth = renderWidth();
-  const image = previewContext.createImageData(outputWidth, inputMeta.height);
+function drawCpuPreview(targetContext = previewContext, readout = readoutConfig()) {
+  const outputWidth = inputMeta.width;
+  const image = targetContext.createImageData(outputWidth, inputMeta.height);
   const params = {
     levels: adcLevels(),
     eit: eitScale(),
@@ -728,31 +734,26 @@ function drawCpuPreview() {
   const shaderTest = viewModeId() === 2;
   const noiseOnly = viewModeId() === 3;
   const simpleIsp = viewModeId() === 4;
-  const readouts = activeReadoutConfigs();
+  params.readout = readout;
   const adcMap = simpleIsp ? new Float32Array(outputWidth * inputMeta.height) : null;
 
   if (simpleIsp) {
     for (let y = 0; y < inputMeta.height; y += 1) {
       for (let x = 0; x < outputWidth; x += 1) {
-        const sourceX = x % inputMeta.width;
-        const sourceIndex = y * inputMeta.width + sourceX;
+        const sourceIndex = y * inputMeta.width + x;
         const outputIndex = y * outputWidth + x;
-        params.readout = readouts[x >= inputMeta.width ? 1 : 0] || readouts[0];
-        adcMap[outputIndex] = adcCodeToSignalFloat(computeAdcCodeAt(sourceX, y, sourceIndex, params).adcCode, params);
+        adcMap[outputIndex] = adcCodeToSignalFloat(computeAdcCodeAt(x, y, sourceIndex, params).adcCode, params);
       }
     }
   }
 
   for (let y = 0; y < inputMeta.height; y += 1) {
     for (let x = 0; x < outputWidth; x += 1) {
-      const sourceX = x % inputMeta.width;
-      const readout = readouts[x >= inputMeta.width ? 1 : 0] || readouts[0];
-      const index = y * inputMeta.width + sourceX;
+      const index = y * inputMeta.width + x;
       const out = (y * outputWidth + x) * 4;
-      params.readout = readout;
 
       if (shaderTest) {
-        image.data[out] = Math.round((sourceX / Math.max(1, inputMeta.width - 1)) * 255);
+        image.data[out] = Math.round((x / Math.max(1, inputMeta.width - 1)) * 255);
         image.data[out + 1] = Math.round((y / Math.max(1, inputMeta.height - 1)) * 255);
         image.data[out + 2] = 64;
         image.data[out + 3] = 255;
@@ -773,7 +774,7 @@ function drawCpuPreview() {
         continue;
       }
 
-      const { adcCode, codeFloat, signalElectron, noiseTerms } = computeAdcCodeAt(sourceX, y, index, params);
+      const { adcCode, codeFloat, signalElectron, noiseTerms } = computeAdcCodeAt(x, y, index, params);
       if (noiseOnly) {
         const sigma = Math.max(
           1e-9,
@@ -795,7 +796,7 @@ function drawCpuPreview() {
       const adc = adcCode / params.levels;
       const sample = errorMode ? Math.min(1, Math.abs(codeFloat - Math.floor(codeFloat)) * 8) : adc;
       const display = Math.round(Math.pow(sample, 1 / 2.2) * 255);
-      const mask = sensorMaskCpu(sourceX, y);
+      const mask = sensorMaskCpu(x, y);
 
       image.data[out] = display * mask[0];
       image.data[out + 1] = display * mask[1];
@@ -804,7 +805,7 @@ function drawCpuPreview() {
     }
   }
 
-  previewContext.putImageData(image, 0, 0);
+  targetContext.putImageData(image, 0, 0);
 }
 
 function prepareHistogramCanvas() {
@@ -1108,19 +1109,24 @@ function drawSnrGraph() {
 function resetView() {
   const rect = viewport.getBoundingClientRect();
   view.scale = fitScale();
-  view.x = Math.max(12, (rect.width - renderWidth() * view.scale) / 2);
+  const paneWidth = isIdcgMode() ? Math.max(1, (rect.width - 8) / 2) : rect.width;
+  view.x = Math.max(12, (paneWidth - inputMeta.width * view.scale) / 2);
   view.y = 12;
   updateCanvasZoom();
 }
 
 function fitScale() {
   const rect = viewport.getBoundingClientRect();
-  return Math.max(0.01, Math.min(8, Math.min(rect.width / renderWidth(), rect.height / inputMeta.height) * 0.96));
+  const paneWidth = isIdcgMode() ? Math.max(1, (rect.width - 8) / 2) : rect.width;
+  return Math.max(0.01, Math.min(8, Math.min(paneWidth / inputMeta.width, rect.height / inputMeta.height) * 0.96));
 }
 
 function zoomAt(clientX, clientY, deltaY) {
   const rect = viewport.getBoundingClientRect();
-  const pointerX = clientX - rect.left;
+  const pointerXInViewport = clientX - rect.left;
+  const paneWidth = isIdcgMode() ? Math.max(1, (rect.width - 8) / 2) : rect.width;
+  const rightPaneLeft = paneWidth + 8;
+  const pointerX = isIdcgMode() && pointerXInViewport >= rightPaneLeft ? pointerXInViewport - rightPaneLeft : pointerXInViewport;
   const pointerY = clientY - rect.top;
   const imageX = (pointerX - view.x) / view.scale;
   const imageY = (pointerY - view.y) / view.scale;
@@ -1323,6 +1329,7 @@ async function main() {
   restorePanelWidth();
   let device = null;
   let context = null;
+  let contextB = null;
   let format = null;
   let paramsBuffer = null;
   let pipeline = null;
@@ -1354,6 +1361,7 @@ async function main() {
           console.warn("WebGPU validation error; using client-side 2D fallback.", event.error);
           device = null;
           context = null;
+          contextB = null;
           pipeline = null;
           paramsBuffer = null;
           bindGroup = null;
@@ -1364,8 +1372,10 @@ async function main() {
           drawCpuPreview();
         });
         context = canvas.getContext("webgpu");
+        contextB = canvasB.getContext("webgpu");
         format = navigator.gpu.getPreferredCanvasFormat();
         context.configure({ device, format, alphaMode: "opaque" });
+        contextB.configure({ device, format, alphaMode: "opaque" });
         paramsBuffer = device.createBuffer({
           size: 28 * Float32Array.BYTES_PER_ELEMENT,
           usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -1400,6 +1410,7 @@ async function main() {
       webGpuDetail = `WebGPU setup failed: ${shortGpuError(error)}`;
       device = null;
       context = null;
+      contextB = null;
       pipeline = null;
       paramsBuffer = null;
       bindGroup = null;
@@ -1423,10 +1434,14 @@ async function main() {
   function uploadInput(input) {
     inputMeta = { width: input.width, height: input.height };
     activeMosaic = input.data;
-    canvas.width = renderWidth();
+    canvas.width = input.width;
     canvas.height = input.height;
-    previewCanvas.width = renderWidth();
+    canvasB.width = input.width;
+    canvasB.height = input.height;
+    previewCanvas.width = input.width;
     previewCanvas.height = input.height;
+    previewCanvasB.width = input.width;
+    previewCanvasB.height = input.height;
     resetView();
     if (!device || !context || !pipeline || !paramsBuffer) {
       bindGroup = null;
@@ -1434,11 +1449,14 @@ async function main() {
       setBackendBadge(renderBackend);
       setGpuVisible(false);
       drawHistogram();
-      drawCpuPreview();
+      const readouts = activeReadoutConfigs();
+      drawCpuPreview(previewContext, readouts[0] || readoutConfig());
+      if (isIdcgMode()) drawCpuPreview(previewContextB, readouts[1] || readouts[0] || readoutConfig());
       return;
     }
     setGpuVisible(true);
     context.configure({ device, format, alphaMode: "opaque" });
+    contextB.configure({ device, format, alphaMode: "opaque" });
     rawTexture?.destroy();
     rawTexture = device.createTexture({
       size: [input.width, input.height],
@@ -1469,49 +1487,64 @@ async function main() {
       ],
     });
     drawHistogram();
-    drawCpuPreview();
+    const readouts = activeReadoutConfigs();
+    drawCpuPreview(previewContext, readouts[0] || readoutConfig());
+    if (isIdcgMode()) drawCpuPreview(previewContextB, readouts[1] || readouts[0] || readoutConfig());
   }
 
   function draw({ updateHistogram = true } = {}) {
     const drawStart = performance.now();
     updateOutputs();
     updateReadoutLabels();
-    const outputWidth = renderWidth();
-    const resized = canvas.width !== outputWidth || previewCanvas.width !== outputWidth;
+    const outputWidth = inputMeta.width;
+    const resized =
+      canvas.width !== outputWidth ||
+      canvasB.width !== outputWidth ||
+      previewCanvas.width !== outputWidth ||
+      previewCanvasB.width !== outputWidth;
     if (canvas.width !== outputWidth) canvas.width = outputWidth;
+    if (canvasB.width !== outputWidth) canvasB.width = outputWidth;
     if (previewCanvas.width !== outputWidth) previewCanvas.width = outputWidth;
+    if (previewCanvasB.width !== outputWidth) previewCanvasB.width = outputWidth;
     if (resized) updateCanvasZoom();
     renderCount += 1;
     if (bindGroup && device && context && paramsBuffer) {
       setGpuVisible(true);
       if (resized) context.configure({ device, format, alphaMode: "opaque" });
-      device.queue.writeBuffer(
-        paramsBuffer,
-        0,
-        buildGpuParams(),
-      );
-
-      const encoder = device.createCommandEncoder();
-      const pass = encoder.beginRenderPass({
-        colorAttachments: [
-          {
-            view: context.getCurrentTexture().createView(),
-            clearValue: { r: 0, g: 0, b: 0, a: 1 },
-            loadOp: "clear",
-            storeOp: "store",
-          },
-        ],
-      });
-      pass.setPipeline(pipeline);
-      pass.setBindGroup(0, bindGroup);
-      pass.draw(3);
-      pass.end();
-      device.queue.submit([encoder.finish()]);
+      if (resized && contextB) contextB.configure({ device, format, alphaMode: "opaque" });
+      const readouts = activeReadoutConfigs();
+      const renderGpuReadout = (targetContext, readout) => {
+        device.queue.writeBuffer(
+          paramsBuffer,
+          0,
+          buildGpuParams({ readouts: [readout], outputWidth: inputMeta.width, acquisitionMode: 0 }),
+        );
+        const encoder = device.createCommandEncoder();
+        const pass = encoder.beginRenderPass({
+          colorAttachments: [
+            {
+              view: targetContext.getCurrentTexture().createView(),
+              clearValue: { r: 0, g: 0, b: 0, a: 1 },
+              loadOp: "clear",
+              storeOp: "store",
+            },
+          ],
+        });
+        pass.setPipeline(pipeline);
+        pass.setBindGroup(0, bindGroup);
+        pass.draw(3);
+        pass.end();
+        device.queue.submit([encoder.finish()]);
+      };
+      renderGpuReadout(context, readouts[0] || readoutConfig());
+      if (isIdcgMode() && contextB) renderGpuReadout(contextB, readouts[1] || readouts[0] || readoutConfig());
     } else {
       setGpuVisible(false);
     }
     if (!bindGroup || !device || !context || !paramsBuffer) {
-      drawCpuPreview();
+      const readouts = activeReadoutConfigs();
+      drawCpuPreview(previewContext, readouts[0] || readoutConfig());
+      if (isIdcgMode()) drawCpuPreview(previewContextB, readouts[1] || readouts[0] || readoutConfig());
     }
     setBackendBadge(renderBackend);
     if (updateHistogram) {
